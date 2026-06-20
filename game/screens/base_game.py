@@ -13,6 +13,7 @@ gameplay:
 
 import pygame
 
+from ..fonts import baloo2, luckiest_guy
 from ..settings import SCREEN_HEIGHT, SCREEN_WIDTH, WHITE
 from .base import BaseScreen
 
@@ -22,9 +23,9 @@ class BaseGameScreen(BaseScreen):
 
     def __init__(self, app):
         super().__init__(app)
-        self.title_font = pygame.font.SysFont("arial", 40, bold=True)
-        self.status_font = pygame.font.SysFont("arial", 22, bold=True)
-        self.hint_font = pygame.font.SysFont("arial", 16)
+        self.title_font = luckiest_guy(40)
+        self.status_font = baloo2(20, bold=True)
+        self.hint_font = baloo2(14)
         self.back_rect = pygame.Rect(24, 24, 110, 40)
 
     def on_enter(self):

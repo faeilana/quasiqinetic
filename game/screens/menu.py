@@ -2,6 +2,7 @@
 
 import pygame
 
+from ..fonts import baloo2, luckiest_guy
 from ..settings import (
     ACCENT,
     MOUNTAIN_THEME,
@@ -13,10 +14,13 @@ from ..settings import (
     WARM_TEXT_DARK,
     WARM_TEXT_MUTED,
     WARM_TITLE,
+    WARM_TITLE_OUTLINE,
     WHITE,
     WOODS_THEME,
 )
 from .base import BaseScreen
+
+OUTLINE_OFFSETS = [(-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2)]
 
 
 class MenuOption:
@@ -30,9 +34,9 @@ class MenuOption:
 class MenuScreen(BaseScreen):
     def __init__(self, app):
         super().__init__(app)
-        self.heading_font = pygame.font.SysFont("arialrounded", 36, bold=True)
-        self.label_font = pygame.font.SysFont("trebuchetms", 24, bold=True)
-        self.hint_font = pygame.font.SysFont("trebuchetms", 16)
+        self.heading_font = luckiest_guy(36)
+        self.label_font = baloo2(20, bold=True)
+        self.hint_font = baloo2(14)
         self.selected = 0
         self.options = self._build_options()
 
@@ -94,9 +98,7 @@ class MenuScreen(BaseScreen):
 
     def draw(self, surface):
         self._draw_background(surface)
-
-        heading = self.heading_font.render("Choose Your Run", True, WARM_TITLE)
-        surface.blit(heading, (SCREEN_WIDTH // 2 - heading.get_width() // 2, 110))
+        self._draw_heading(surface)
 
         for i, option in enumerate(self.options):
             self._draw_card(surface, option, is_selected=(i == self.selected))
@@ -117,6 +119,18 @@ class MenuScreen(BaseScreen):
             )
             pygame.draw.line(surface, color, (0, y), (SCREEN_WIDTH, y))
             pygame.draw.line(surface, color, (0, y + 1), (SCREEN_WIDTH, y + 1))
+
+    def _draw_heading(self, surface):
+        text = "Choose Your Run"
+        x = SCREEN_WIDTH // 2 - self.heading_font.size(text)[0] // 2
+        y = 110
+
+        outline_surf = self.heading_font.render(text, True, WARM_TITLE_OUTLINE)
+        for dx, dy in OUTLINE_OFFSETS:
+            surface.blit(outline_surf, (x + dx, y + dy))
+
+        heading = self.heading_font.render(text, True, WARM_TITLE)
+        surface.blit(heading, (x, y))
 
     def _draw_card(self, surface, option, is_selected):
         theme = option.theme

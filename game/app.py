@@ -19,7 +19,13 @@ class App:
     """
 
     def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        # SCALED tells SDL to render at the display's native (e.g. Retina)
+        # resolution and scale up, instead of rendering at 1x and letting
+        # macOS blur-upscale the window - this is what was causing the
+        # grainy/blurry look.
+        self.screen = pygame.display.set_mode(
+            (SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED
+        )
         pygame.display.set_caption(GAME_TITLE)
         self.clock = pygame.time.Clock()
         self.running = True

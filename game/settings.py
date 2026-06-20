@@ -19,6 +19,7 @@ WARM_BG_TOP = (255, 238, 214)
 WARM_BG_BOTTOM = (255, 198, 150)
 WARM_TITLE = (255, 150, 70)
 WARM_TITLE_BRIGHT = (255, 90, 90)
+WARM_TITLE_OUTLINE = (110, 59, 32)
 WARM_TEXT_DARK = (110, 75, 60)
 WARM_TEXT_MUTED = (160, 115, 95)
 
@@ -47,6 +48,6 @@ MOUNTAIN_THEME = {
     "name": "The Mountain",
     "sky_top": (130, 190, 230),
     "sky_bottom": (225, 240, 245),
-    "accent": (90, 110, 130),
+    "accent": (255, 170, 60),
     "ground": (210, 220, 225),
 }

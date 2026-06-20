@@ -4,6 +4,7 @@ import math
 
 import pygame
 
+from ..fonts import baloo2, luckiest_guy
 from ..settings import (
     GAME_TITLE,
     SCREEN_HEIGHT,
@@ -14,16 +15,19 @@ from ..settings import (
     WARM_TEXT_MUTED,
     WARM_TITLE,
     WARM_TITLE_BRIGHT,
+    WARM_TITLE_OUTLINE,
 )
 from .base import BaseScreen
+
+OUTLINE_OFFSETS = [(-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2)]
 
 
 class LandingScreen(BaseScreen):
     def __init__(self, app):
         super().__init__(app)
-        self.title_font = pygame.font.SysFont("arialrounded", 64, bold=True)
-        self.subtitle_font = pygame.font.SysFont("trebuchetms", 22)
-        self.hint_font = pygame.font.SysFont("trebuchetms", 18)
+        self.title_font = luckiest_guy(64)
+        self.subtitle_font = baloo2(20, bold=True)
+        self.hint_font = baloo2(16)
         self.t = 0.0
 
     def on_enter(self):
@@ -59,11 +63,15 @@ class LandingScreen(BaseScreen):
         title_color = tuple(
             int(WARM_TITLE_BRIGHT[i] * pulse + WARM_TITLE[i] * (1 - pulse)) for i in range(3)
         )
+        x = SCREEN_WIDTH // 2 - self.title_font.size(GAME_TITLE)[0] // 2
+        y = SCREEN_HEIGHT // 2 - 130
+
+        outline_surf = self.title_font.render(GAME_TITLE, True, WARM_TITLE_OUTLINE)
+        for dx, dy in OUTLINE_OFFSETS:
+            surface.blit(outline_surf, (x + dx, y + dy))
+
         title_surf = self.title_font.render(GAME_TITLE, True, title_color)
-        surface.blit(
-            title_surf,
-            (SCREEN_WIDTH // 2 - title_surf.get_width() // 2, SCREEN_HEIGHT // 2 - 130),
-        )
+        surface.blit(title_surf, (x, y))
 
     def _draw_subtitle(self, surface):
         subtitle = self.subtitle_font.render(
