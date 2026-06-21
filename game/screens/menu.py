@@ -1,6 +1,8 @@
-"""Level-select menu: 3 cards for Train Station, Woods, and Mountain."""
+"""Level-select menu: cards for the runner levels plus Fruit Ninja."""
 
 import pygame
+
+from fruitninja import FRUIT_NINJA_THEME
 
 from ..fonts import baloo2, luckiest_guy
 from ..settings import (
@@ -41,17 +43,18 @@ class MenuScreen(BaseScreen):
         self.options = self._build_options()
 
     def _build_options(self):
-        card_w, card_h = 240, 320
-        gap = 50
-        total_w = card_w * 3 + gap * 2
-        start_x = (SCREEN_WIDTH - total_w) // 2
-        y = 200
-
         themes = [
             ("train_station", "Train Station", TRAIN_STATION_THEME),
             ("woods", "The Woods", WOODS_THEME),
             ("mountain", "The Mountain", MOUNTAIN_THEME),
+            ("fruit_ninja", "Fruit Ninja", FRUIT_NINJA_THEME),
         ]
+
+        card_w, card_h = 200, 300
+        gap = 30
+        total_w = card_w * len(themes) + gap * (len(themes) - 1)
+        start_x = (SCREEN_WIDTH - total_w) // 2
+        y = 210
 
         options = []
         for i, (key, label, theme) in enumerate(themes):
