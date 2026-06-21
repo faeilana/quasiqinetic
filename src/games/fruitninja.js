@@ -12,9 +12,12 @@ const MIN_LAUNCH      = 700;
 const MAX_LAUNCH      = 950;
 const FRUIT_RADIUS    = 34;
 const MAX_MISSES      = 3;
-const TRAIL_LENGTH    = 14;
+const TRAIL_LENGTH    = 18;
 const STORAGE_KEY     = 'fruitninja-sessions';
-const WRIST_MIN_MOVE  = 12; // min px movement in game coords to register a wrist slice
+const WRIST_MIN_MOVE  = 5;  // min px movement in game coords to register a wrist slice
+const WRIST_INTERP    = 10; // interpolation steps per segment (more = fewer missed fruits)
+const SPEED_BONUS_R   = 0.6;// extra hit radius per px/frame of wrist speed (max +18px)
+const TRAIL_FADE_MS   = 250;// trail point lifetime in ms (time-based, not frame-based)
 
 const THEME = {
   skyTop:    [28,  16,  40],
@@ -179,7 +182,10 @@ let score, misses, spawnTimer, gameOver, startTime, mouseSlicing;
 // Camera state
 let leftPrev  = null; // previous [x,y] of left wrist in game coords
 let rightPrev = null;
+let leftTarget  = null; // latest target for interpolation
+let rightTarget = null;
 let cameraActive = false;
+let lastPoseTime = 0;
 
 function reset() {
   fruits = []; splats = [];
@@ -206,9 +212,13 @@ function saveSession() {
 
 // ── Slice helpers ─────────────────────────────────────────────────────────────
 function checkFruitsAt(px, py) {
+  checkFruitsAtRadius(px, py, FRUIT_RADIUS);
+}
+
+function checkFruitsAtRadius(px, py, radius) {
   if (gameOver) return;
   for (const f of fruits) {
-    if (!f.sliced && f.contains(px, py)) {
+    if (!f.sliced && Math.hypot(px - f.x, py - f.y) <= radius) {
       f.sliced = true;
       score++;
       for (let i = 0; i < 10; i++) splats.push(new Splat(f.x, f.y, f.hl));
@@ -218,26 +228,31 @@ function checkFruitsAt(px, py) {
 
 // Mouse/touch: add to white trail + check fruits
 function mouseSliceAt(px, py) {
-  mouseTrail.push([px, py]);
+  mouseTrail.push([px, py, performance.now()]);
   if (mouseTrail.length > TRAIL_LENGTH) mouseTrail.shift();
   checkFruitsAt(px, py);
 }
 
-// Wrist: interpolate 5 points along segment for reliable hit detection
+// Wrist: interpolate points along segment for reliable hit detection
+// Uses speed-expanded radius so fast slashes have a wider hitbox
 function wristSliceSegment(x0, y0, x1, y1, trailArr) {
-  const steps = 5;
+  const dist  = Math.hypot(x1 - x0, y1 - y0);
+  const steps = WRIST_INTERP;
+  const bonus = Math.min(18, dist * SPEED_BONUS_R);
+  const now   = performance.now();
   for (let i = 0; i <= steps; i++) {
     const t  = i / steps;
     const px = x0 + (x1 - x0) * t;
     const py = y0 + (y1 - y0) * t;
-    trailArr.push([px, py]);
+    trailArr.push([px, py, now]);
     if (trailArr.length > TRAIL_LENGTH) trailArr.shift();
-    checkFruitsAt(px, py);
+    checkFruitsAtRadius(px, py, FRUIT_RADIUS + bonus);
   }
 }
 
 // ── Pose callback (called by MediaPipe at ~30 fps) ────────────────────────────
 function onPoseResult(landmarks) {
+  lastPoseTime = performance.now();
   const lw = landmarks[LM.LEFT_WRIST];
   const rw = landmarks[LM.RIGHT_WRIST];
 
@@ -251,9 +266,10 @@ function onPoseResult(landmarks) {
       }
     }
     leftPrev = [nx, ny];
+    leftTarget = [nx, ny];
   } else {
     leftPrev = null;
-    if (leftTrail.length) leftTrail.shift(); // fade when wrist lost
+    leftTarget = null;
   }
 
   // Right wrist (orange trail)
@@ -266,9 +282,10 @@ function onPoseResult(landmarks) {
       }
     }
     rightPrev = [nx, ny];
+    rightTarget = [nx, ny];
   } else {
     rightPrev = null;
-    if (rightTrail.length) rightTrail.shift();
+    rightTarget = null;
   }
 }
 
@@ -317,10 +334,10 @@ document.addEventListener('keydown', (e) => {
 function update(dt) {
   // Fade mouse trail when not held
   if (!mouseSlicing && mouseTrail.length) mouseTrail.shift();
-  // Fade wrist trails when wrists are still (faded per pose callback above, but
-  // also tick here once per game frame so they vanish smoothly at 60 fps)
-  if (leftTrail.length  > 0) leftTrail.shift();
-  if (rightTrail.length > 0) rightTrail.shift();
+  // Fade wrist trails based on time (not per-frame shift)
+  const now = performance.now();
+  while (leftTrail.length  > 0 && (now - (leftTrail[0][2]  || 0)) > TRAIL_FADE_MS) leftTrail.shift();
+  while (rightTrail.length > 0 && (now - (rightTrail[0][2] || 0)) > TRAIL_FADE_MS) rightTrail.shift();
 
   splats.forEach(s => s.update(dt));
   splats = splats.filter(s => s.life > 0);
@@ -369,11 +386,14 @@ function drawBg() {
 function drawTrailArr(trailArr, colorFn) {
   if (trailArr.length < 2) return;
   const n = trailArr.length;
+  const now = performance.now();
   ctx.lineCap = 'round';
   for (let i = 1; i < n; i++) {
-    const alpha = i / n;
+    const age   = now - (trailArr[i][2] || 0);
+    const alpha = Math.max(0, 1 - age / TRAIL_FADE_MS);
+    if (alpha <= 0) continue;
     ctx.strokeStyle = colorFn(alpha);
-    ctx.lineWidth   = Math.max(1, Math.floor(8 * i / n));
+    ctx.lineWidth   = Math.max(1, Math.floor(8 * alpha));
     ctx.beginPath();
     ctx.moveTo(trailArr[i-1][0], trailArr[i-1][1]);
     ctx.lineTo(trailArr[i][0],   trailArr[i][1]);
