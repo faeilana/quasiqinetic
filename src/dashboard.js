@@ -327,15 +327,21 @@ function renderSummary(sessions) {
   document.getElementById('stat-duration').textContent = totalMs > 0 ? fmtMs(totalMs) : '—';
 }
 
-// ── Load Fruit Ninja sessions from public/fruitninja-sessions.json ───────────
+// ── Load Fruit Ninja sessions (web localStorage + Python JSON file) ───────────
 async function loadNinjaSessions() {
+  // Web game sessions saved by fruitninja.js
+  let webSessions = [];
+  try { webSessions = JSON.parse(localStorage.getItem('fruitninja-sessions') ?? '[]'); } catch {}
+
+  // Python desktop game sessions written to public/fruitninja-sessions.json
+  let pythonSessions = [];
   try {
     const res = await fetch('/fruitninja-sessions.json');
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
+    if (res.ok) pythonSessions = await res.json();
+  } catch {}
+
+  // Merge and sort newest-first
+  return [...webSessions, ...pythonSessions].sort((a, b) => b.startTime - a.startTime);
 }
 
 function fmtMs2(ms) {
@@ -417,12 +423,12 @@ function initGameSelector() {
     btnRunner.classList.remove('active');
     runnerContent.style.display = 'none';
     ninjaContent.style.display  = 'flex';
-    playBtn.removeAttribute('href');
-    playBtn.textContent = '▶ python main.py';
-    playBtn.title       = 'Fruit Ninja runs as a desktop app — launch it from your terminal';
-    playBtn.style.opacity      = '0.65';
-    playBtn.style.cursor       = 'default';
-    playBtn.onclick            = (e) => e.preventDefault();
+    playBtn.href               = '/fruitninja.html';
+    playBtn.textContent        = '▶ PLAY';
+    playBtn.title              = '';
+    playBtn.style.opacity      = '';
+    playBtn.style.cursor       = '';
+    playBtn.onclick            = null;
   });
 }
 
