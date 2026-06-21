@@ -7,8 +7,8 @@ const STORAGE_KEY = 'movement-runner-sessions';
 // Positions are [left%, top%] relative to the body image's rendered bounds.
 // Tuned for src/img/human_body.png — arms-at-sides front-facing figure.
 const JOINT_META = {
-  leftShoulder:  { pos: [38, 19], label: 'Left Shoulder',  actions: ['lean_left'] },
-  rightShoulder: { pos: [62, 19], label: 'Right Shoulder', actions: ['lean_right'] },
+  leftShoulder:  { pos: [38, 26], label: 'Left Shoulder',  actions: ['lean_left'] },
+  rightShoulder: { pos: [62, 26], label: 'Right Shoulder', actions: ['lean_right'] },
   leftElbow:     { pos: [38, 36], label: 'Left Elbow',     actions: [] },
   rightElbow:    { pos: [62, 36], label: 'Right Elbow',    actions: [] },
   leftWrist:     { pos: [35, 47], label: 'Left Wrist',     actions: [] },
@@ -589,4 +589,139 @@ async function init() {
   window.addEventListener('resize', renderChart);
 }
 
+// ── Username ──────────────────────────────────────────────────────────────────
+const USERNAME_KEY = 'quasiqinetic-username';
+const LB_KEY       = 'quasiqinetic-leaderboard';
+
+function getUsername() {
+  return localStorage.getItem(USERNAME_KEY) || 'Anonymous';
+}
+
+function saveToLeaderboard(session) {
+  const username = getUsername();
+  const entry = {
+    username,
+    game_id:   session.game_id ?? 'runner',
+    score:     session.score ?? 0,
+    calories:  session.calories ?? 0,
+    timestamp: session.endTime ?? Date.now(),
+  };
+  try {
+    const board = JSON.parse(localStorage.getItem(LB_KEY) ?? '[]');
+    board.push(entry);
+    localStorage.setItem(LB_KEY, JSON.stringify(board));
+  } catch {}
+}
+
+function initUsername() {
+  const display   = document.getElementById('username-display');
+  const editBtn   = document.getElementById('username-edit-btn');
+  const modal     = document.getElementById('username-modal');
+  const input     = document.getElementById('username-input');
+  const saveBtn   = document.getElementById('username-save');
+
+  function refresh() {
+    display.textContent = getUsername();
+  }
+
+  function openModal() {
+    input.value = getUsername() === 'Anonymous' ? '' : getUsername();
+    modal.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function saveUsername() {
+    const name = input.value.trim();
+    if (name) localStorage.setItem(USERNAME_KEY, name);
+    modal.style.display = 'none';
+    refresh();
+  }
+
+  editBtn.addEventListener('click', openModal);
+  saveBtn.addEventListener('click', saveUsername);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveUsername(); });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+  // Prompt for name on first visit
+  if (!localStorage.getItem(USERNAME_KEY)) openModal();
+  refresh();
+}
+
+function initLeaderboard() {
+  const btn     = document.getElementById('lb-btn');
+  const modal   = document.getElementById('lb-modal');
+  const closeBtn= document.getElementById('lb-close');
+  const list    = document.getElementById('lb-list');
+  const tabs    = document.querySelectorAll('.lb-tab');
+  let activeGame = 'runner';
+
+  function renderLB() {
+    try {
+      const board = JSON.parse(localStorage.getItem(LB_KEY) ?? '[]');
+      const me    = getUsername();
+
+      // Get best score per username for the active game
+      const best = {};
+      for (const e of board) {
+        if (e.game_id !== activeGame) continue;
+        if (!best[e.username] || e.score > best[e.username].score) {
+          best[e.username] = e;
+        }
+      }
+
+      const sorted = Object.values(best).sort((a, b) => b.score - a.score);
+      if (sorted.length === 0) {
+        list.innerHTML = `<div class="lb-empty">No scores yet — play a game!</div>`;
+        return;
+      }
+
+      const rankLabel = (i) => {
+        if (i === 0) return `<span class="lb-rank gold">🥇</span>`;
+        if (i === 1) return `<span class="lb-rank silver">🥈</span>`;
+        if (i === 2) return `<span class="lb-rank bronze">🥉</span>`;
+        return `<span class="lb-rank">${i + 1}</span>`;
+      };
+
+      list.innerHTML = sorted.slice(0, 10).map((e, i) => `
+        <div class="lb-row ${e.username === me ? 'me' : ''}">
+          ${rankLabel(i)}
+          <span class="lb-name">${e.username}${e.username === me ? ' (you)' : ''}</span>
+          <span class="lb-score">${e.score}${activeGame === 'runner' ? 'm' : ' pts'}</span>
+          <span class="lb-cal">${Math.round(e.calories)} kcal</span>
+        </div>`).join('');
+    } catch {}
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeGame = tab.dataset.game;
+      renderLB();
+    });
+  });
+
+  btn.addEventListener('click', () => {
+    renderLB();
+    modal.style.display = 'flex';
+  });
+  closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+}
+
+// Patch session saves to also write to leaderboard
+const _origSetItem = localStorage.setItem.bind(localStorage);
+const GAME_KEYS = { 'movement-runner-sessions': 'runner', 'fruitninja-sessions': 'fruitninja' };
+localStorage.setItem = function(key, value) {
+  _origSetItem(key, value);
+  if (GAME_KEYS[key]) {
+    try {
+      const sessions = JSON.parse(value);
+      if (sessions.length > 0) saveToLeaderboard({ ...sessions[0], game_id: GAME_KEYS[key] });
+    } catch {}
+  }
+};
+
+initUsername();
+initLeaderboard();
 init();

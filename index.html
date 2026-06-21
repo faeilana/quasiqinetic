@@ -413,6 +413,93 @@
       padding: 20px;
       line-height: 2.4;
     }
+    /* ── Username + leaderboard ─────────────────────────────────────── */
+    .username-wrap {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 100px; padding: 6px 14px;
+    }
+    .username-label {
+      font-size: 0.78rem; font-weight: 600; color: var(--cobalt);
+      min-width: 60px;
+    }
+    .username-edit-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-3); font-size: 0.78rem; padding: 0; line-height: 1;
+    }
+    .username-edit-btn:hover { color: var(--juicy); }
+
+    .lb-btn {
+      font-family: var(--font); font-size: 0.75rem; font-weight: 600;
+      padding: 8px 16px; border-radius: 100px;
+      border: 1.5px solid var(--border); background: transparent;
+      color: var(--egyptian); cursor: pointer; transition: all 0.2s;
+    }
+    .lb-btn:hover { background: var(--egyptian); color: white; }
+
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(57,41,137,0.25);
+      backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: white; border-radius: 20px;
+      box-shadow: 0 8px 48px rgba(57,41,137,0.22);
+      padding: 28px 28px 24px; width: 320px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .modal-title {
+      font-size: 1rem; font-weight: 800; color: var(--cobalt);
+      letter-spacing: 0.04em;
+    }
+    .modal-input {
+      font-family: var(--font); font-size: 0.9rem;
+      padding: 10px 14px; border-radius: 10px;
+      border: 1.5px solid var(--border); outline: none; color: var(--cobalt);
+      width: 100%;
+    }
+    .modal-input:focus { border-color: var(--egyptian); }
+    .modal-save {
+      font-family: var(--font); font-size: 0.82rem; font-weight: 700;
+      padding: 10px; border-radius: 100px;
+      background: var(--egyptian); color: white; border: none;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .modal-save:hover { background: var(--cobalt); }
+    .modal-close {
+      font-family: var(--font); font-size: 0.78rem; font-weight: 600;
+      padding: 8px; border-radius: 100px;
+      background: transparent; color: var(--text-3);
+      border: 1.5px solid var(--border); cursor: pointer;
+    }
+    .modal-close:hover { border-color: var(--egyptian); color: var(--egyptian); }
+
+    .lb-tabs { display: flex; gap: 6px; }
+    .lb-tab {
+      font-family: var(--font); font-size: 0.68rem; font-weight: 600;
+      letter-spacing: 0.06em; padding: 5px 14px; border-radius: 100px;
+      border: 1.5px solid var(--border); background: transparent;
+      color: var(--text-3); cursor: pointer; transition: all 0.15s;
+    }
+    .lb-tab.active { background: var(--egyptian); color: white; border-color: var(--egyptian); }
+
+    .lb-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+    .lb-row {
+      display: grid; grid-template-columns: 28px 1fr auto auto;
+      align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: 10px;
+      background: var(--bg); font-size: 0.8rem;
+    }
+    .lb-row.me { background: rgba(95,39,139,0.1); border: 1.5px solid rgba(95,39,139,0.2); }
+    .lb-rank { font-weight: 800; color: var(--text-3); font-size: 0.75rem; }
+    .lb-rank.gold   { color: #f59e0b; }
+    .lb-rank.silver { color: #94a3b8; }
+    .lb-rank.bronze { color: #b45309; }
+    .lb-name  { font-weight: 600; color: var(--cobalt); }
+    .lb-score { font-weight: 700; color: var(--egyptian); font-size: 0.82rem; }
+    .lb-cal   { font-size: 0.68rem; color: var(--text-3); }
+    .lb-empty { text-align: center; color: var(--text-3); font-size: 0.75rem; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -430,8 +517,37 @@
     </button>
   </div>
 
-  <a href="/runner.html" class="play-btn" id="play-btn">▶ PLAY</a>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="lb-btn" id="lb-btn">🏆 Leaderboard</button>
+    <div class="username-wrap" id="username-wrap">
+      <span class="username-label" id="username-display"></span>
+      <button class="username-edit-btn" id="username-edit-btn">✎</button>
+    </div>
+    <a href="/runner.html" class="play-btn" id="play-btn">▶ PLAY</a>
+  </div>
 </header>
+
+<!-- ── Username modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="username-modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">Enter your name</div>
+    <input class="modal-input" id="username-input" type="text" maxlength="20" placeholder="Your name…" autocomplete="off"/>
+    <button class="modal-save" id="username-save">Save</button>
+  </div>
+</div>
+
+<!-- ── Leaderboard modal ────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="lb-modal" style="display:none">
+  <div class="modal-box" style="width:420px">
+    <div class="modal-title">🏆 Leaderboard</div>
+    <div class="lb-tabs">
+      <button class="lb-tab active" data-game="runner">Movement Runner</button>
+      <button class="lb-tab" data-game="fruitninja">Fruit Ninja</button>
+    </div>
+    <div id="lb-list" class="lb-list"></div>
+    <button class="modal-close" id="lb-close">Close</button>
+  </div>
+</div>
 
 <!-- ── Main grid ───────────────────────────────────────────────────── -->
 <div class="main-grid">
