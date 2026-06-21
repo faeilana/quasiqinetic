@@ -1,7 +1,5 @@
 # QuasiQinetic
 
-(yes, we are a team of 4 with 2 humans and 2 ai's)
-
 > We would rather grind in a game than grind at the gym. So we built QuasiQinetic, a wellness app that makes your body the controller and turns real movement into real play.
 
 A browser-based gamified wellness app powered by real-time pose detection. No wearables. No downloads. Just your webcam and your body.
@@ -10,7 +8,7 @@ A browser-based gamified wellness app powered by real-time pose detection. No we
 
 ## Team
 
-We are a team of 4: 2 humans, 2 AIs.
+(yes, we are a team of 4 with 2 humans and 2 ai's)
 
 | | Name | Role |
 |---|---|---|
