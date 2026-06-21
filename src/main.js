@@ -178,35 +178,37 @@ function gameLoop() {
 
   // ── playing ────────────────────────────────────────────────────────────────
   const { action, confidence } = classifier.classify(landmarks, worldLandmarks);
-  const runnerPhase = runner.getPhase();
+  const phaseBefore = runner.getPhase();
 
-  if (runnerPhase === "dead" && prevRunnerPhase !== "dead") {
+  stats.record(action);
+  runner.update(action);
+
+  const phaseAfter = runner.getPhase();
+
+  // Check transitions AFTER update so we catch the frame the phase changes.
+  if (phaseAfter === "dead" && phaseBefore !== "dead") {
     stats.finish(runner.getScore());
     endSession(runner.getScore());
     setStatus("Game over — raise your hand to play again");
   }
-  if (runnerPhase === "won" && prevRunnerPhase !== "won") {
+  if (phaseAfter === "won" && phaseBefore !== "won") {
     stats.finish(runner.getScore());
   }
-
-  stats.record(action);
-  runner.update(action);
 
   // 3D render + 2D HUD
   runner.render();
   hudCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   runner.drawHUD(hudCtx);
-  if (runnerPhase === "playing") {
+  if (phaseAfter === "playing") {
     drawActionHUD(hudCtx, action, confidence, CANVAS_W);
     setStatus("Go!", "ready");
   }
 
-  // If runner reached dead/won → go back to waiting for next hand raise
-  const afterPhase = runner.getPhase();
-  if ((runnerPhase === "dead" || runnerPhase === "won") && afterPhase !== runnerPhase) {
+  // Return to waiting state after game ends
+  if (phaseAfter === "dead" || phaseAfter === "won") {
     appPhase = "waiting"; handRaiseCount = 0;
   }
-  prevRunnerPhase = afterPhase;
+  prevRunnerPhase = phaseAfter;
 
   logPrediction(action, confidence, {
     hipY:      (landmarks[23].y + landmarks[24].y) / 2,
