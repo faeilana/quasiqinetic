@@ -7,8 +7,8 @@ const STORAGE_KEY = 'movement-runner-sessions';
 // Positions are [left%, top%] relative to the body image's rendered bounds.
 // Tuned for src/img/human_body.png — arms-at-sides front-facing figure.
 const JOINT_META = {
-  leftShoulder:  { pos: [28, 26], label: 'Left Shoulder',  actions: ['lean_left'] },
-  rightShoulder: { pos: [72, 26], label: 'Right Shoulder', actions: ['lean_right'] },
+  leftShoulder:  { pos: [33, 26], label: 'Left Shoulder',  actions: ['lean_left'] },
+  rightShoulder: { pos: [67, 26], label: 'Right Shoulder', actions: ['lean_right'] },
   leftElbow:     { pos: [38, 36], label: 'Left Elbow',     actions: [] },
   rightElbow:    { pos: [62, 36], label: 'Right Elbow',    actions: [] },
   leftWrist:     { pos: [35, 47], label: 'Left Wrist',     actions: [] },
