@@ -141,7 +141,7 @@ export function createRunner(canvas) {
     return {
       phase:          'idle',
       score:          0,
-      speed:          0.13,
+      speed:          0.16,
       frame:          0,
       lives:          3,
       lane:           1,
@@ -181,7 +181,7 @@ export function createRunner(canvas) {
 
     s.frame++;
     s.score = Math.floor(s.frame / 4);
-    s.speed = Math.min(0.38, 0.13 + s.frame * 0.00018);
+    s.speed = Math.min(0.45, 0.16 + s.frame * 0.00022);
 
     // Lane interpolation
     if (s.laneT < 1) s.laneT = Math.min(1, s.laneT + 0.1);
@@ -221,7 +221,7 @@ export function createRunner(canvas) {
 
     // ── Obstacles ────────────────────────────────────────────────────────────
     s.obstacleTimer++;
-    if (s.obstacleTimer >= 120) { spawnObstacle(); s.obstacleTimer = 0; }
+    if (s.obstacleTimer >= 105) { spawnObstacle(); s.obstacleTimer = 0; }
     for (const o of liveObstacles) { o.z += s.speed; o.mesh.position.z = o.z; }
     for (let i = liveObstacles.length - 1; i >= 0; i--) {
       if (liveObstacles[i].z > 4) { scene.remove(liveObstacles[i].mesh); liveObstacles.splice(i, 1); }
