@@ -6,10 +6,13 @@ import { LM } from "./poseTracker.js";
 
 const CALIBRATION_FRAMES = 60; // ~2 s at 30 fps
 
-const JUMP_HIP_DROP    = 0.07; // hips must rise this much above baseline (y decreases = up)
-const JUMP_CONF_RANGE  = 0.10; // delta range over which confidence goes 0→1 past threshold
+const JUMP_HIP_DROP    = 0.16; // hips must rise this much above smoothed baseline (y decreases = up)
+const JUMP_CONF_RANGE  = 0.08;
+const JUMP_CONSEC_REQ  = 5;    // consecutive frames of elevation needed — filters out sway/noise
+const JUMP_COOLDOWN_F  = 30;   // frames before jump can re-trigger after firing
+const HIP_SMOOTH_N     = 5;    // rolling-average window to smooth noisy hip readings
 
-const DUCK_SHOULDER_FALL  = 0.07; // shoulders must drop this much below baseline (y increases = down)
+const DUCK_SHOULDER_FALL  = 0.09; // shoulders must drop this much below baseline (y increases = down)
 const DUCK_CONF_RANGE     = 0.10;
 
 const LEAN_THRESHOLD  = 0.07; // hip-centre x must shift this much from baseline
@@ -56,14 +59,34 @@ function allVisible(lm, ...indices) {
  * }}
  */
 export function createClassifier() {
-  let samples = [];
-  let baseline = null;
+  let samples      = [];
+  let baseline     = null;
+  let jumpConsec   = 0;   // consecutive frames hip is above threshold
+  let jumpCooldown = 0;   // frames remaining before jump can fire again
+  let hipYHistory  = [];  // rolling buffer for hip-Y smoothing
+  // Schmitt-trigger zone: -1=left, 0=center, 1=right.
+  // Enters a zone when delta crosses LEAN_THRESHOLD; exits when delta returns
+  // within 40% of threshold, preventing jitter near the boundary.
+  let leanZone = 0;
 
   function isCalibrating() { return baseline === null; }
 
   function reset() {
-    samples = [];
-    baseline = null;
+    samples      = [];
+    baseline     = null;
+    jumpConsec   = 0;
+    jumpCooldown = 0;
+    hipYHistory  = [];
+    leanZone     = 0;
+  }
+
+  // Clear transient action state without discarding calibration baseline.
+  // Call this when a new game starts.
+  function clearJumpState() {
+    jumpConsec   = 0;
+    jumpCooldown = 0;
+    hipYHistory  = [];
+    leanZone     = 0;
   }
 
   function classify(landmarks, worldLandmarks) {
@@ -102,11 +125,28 @@ export function createClassifier() {
 
     // ── Action detection (priority order) ──
 
-    // 1. Jump — hips rise above baseline (y decreases toward 0 = top of frame)
-    if (allVisible(landmarks, LM.LEFT_HIP, LM.RIGHT_HIP)) {
-      const delta = baseline.hipY - hipY;
+    // Smooth hip-Y over a rolling window to suppress frame-to-frame noise.
+    hipYHistory.push(hipY);
+    if (hipYHistory.length > HIP_SMOOTH_N) hipYHistory.shift();
+    const smoothHipY = avg(hipYHistory);
+
+    // 1. Jump — smoothed hips rise clearly above baseline for several consecutive frames.
+    //    Requires JUMP_CONSEC_REQ sustained frames to filter sway/bounce noise.
+    //    A cooldown after firing prevents rapid re-jumps on landing.
+    if (jumpCooldown > 0) {
+      jumpCooldown--;
+      jumpConsec = 0;
+    } else if (allVisible(landmarks, LM.LEFT_HIP, LM.RIGHT_HIP)) {
+      const delta = baseline.hipY - smoothHipY;  // positive = hips moved up
       if (delta > JUMP_HIP_DROP) {
-        return { action: "jump", confidence: clamp01(delta / (JUMP_HIP_DROP + JUMP_CONF_RANGE)), calibrating: false };
+        jumpConsec++;
+        if (jumpConsec >= JUMP_CONSEC_REQ) {
+          jumpCooldown = JUMP_COOLDOWN_F;
+          jumpConsec   = 0;
+          return { action: "jump", confidence: clamp01(delta / (JUMP_HIP_DROP + JUMP_CONF_RANGE)), calibrating: false };
+        }
+      } else {
+        jumpConsec = 0;  // reset streak if elevation drops below threshold
       }
     }
 
@@ -118,15 +158,24 @@ export function createClassifier() {
       }
     }
 
-    // 3. Lean right / left — whole body shifts laterally
+    // 3. Lean right / left — continuous zone mapping (Schmitt trigger).
+    //    Body position directly maps to a lane zone; the character tracks
+    //    wherever the body is. Returning to center moves the character to middle.
     if (allVisible(landmarks, LM.LEFT_HIP, LM.RIGHT_HIP)) {
       const delta = baseline.hipX - hipX; // positive = moved right on mirrored display
-      if (delta > LEAN_THRESHOLD) {
-        return { action: "lean_right", confidence: clamp01(delta / (LEAN_THRESHOLD + LEAN_CONF_RANGE)), calibrating: false };
+
+      // Update Schmitt zone with asymmetric thresholds to suppress boundary jitter.
+      if (leanZone === 0) {
+        if (delta  >  LEAN_THRESHOLD) leanZone =  1;
+        if (-delta >  LEAN_THRESHOLD) leanZone = -1;
+      } else if (leanZone === 1) {
+        if (delta  < LEAN_THRESHOLD * 0.4) leanZone = 0;
+      } else {
+        if (-delta < LEAN_THRESHOLD * 0.4) leanZone = 0;
       }
-      if (-delta > LEAN_THRESHOLD) {
-        return { action: "lean_left", confidence: clamp01(-delta / (LEAN_THRESHOLD + LEAN_CONF_RANGE)), calibrating: false };
-      }
+
+      if (leanZone ===  1) return { action: "lean_right", confidence: clamp01(delta  / (LEAN_THRESHOLD + LEAN_CONF_RANGE)), calibrating: false };
+      if (leanZone === -1) return { action: "lean_left",  confidence: clamp01(-delta / (LEAN_THRESHOLD + LEAN_CONF_RANGE)), calibrating: false };
     }
 
     // 4. Squat — knee angle drops below threshold (3-D world landmarks for accuracy)
@@ -143,8 +192,10 @@ export function createClassifier() {
     }
 
     // 5. Idle — nothing triggered
-    return { action: "idle", confidence: 1, calibrating: false };
+    const centeredNow = !allVisible(landmarks, LM.LEFT_HIP, LM.RIGHT_HIP)
+      || Math.abs(baseline.hipX - hipX) < LEAN_THRESHOLD * 1.5;
+    return { action: "idle", confidence: 1, calibrating: false, centered: centeredNow };
   }
 
-  return { classify, reset, isCalibrating };
+  return { classify, reset, clearJumpState, isCalibrating };
 }
