@@ -1,11 +1,12 @@
 """Fruit Ninja screen: spawns fruit, tracks slices, score and misses.
 
 Built on the same `BaseScreen` interface as the runner levels so it can be
-registered in `game/app.py` and reached from the menu (see README.md).
+registered in `game/app.py` and reached from the menu (already wired in).
 
-Input today is the mouse pointer as a stand-in for a slicing motion. Once
-`tracking/pose_tracker.py` emits a hand position, feed that point into
-`slice_at()` instead of the mouse and the rest works unchanged.
+Input today is the mouse pointer as a stand-in for a slicing motion - move
+with the button held (or click) to slice. Once `tracking/pose_tracker.py`
+emits a hand position, feed that point into `slice_at()` instead of the
+mouse and the rest works unchanged.
 """
 
 import random
@@ -25,6 +26,34 @@ from .settings import (
     SPAWN_INTERVAL,
 )
 
+TRAIL_LENGTH = 12  # number of recent slice points kept for the blade trail
+
+
+class Splat:
+    """Short-lived juice particle spawned when a fruit is sliced."""
+
+    def __init__(self, x, y, color, rng):
+        self.x = x
+        self.y = y
+        speed = rng.uniform(120, 320)
+        self.vx = speed * rng.uniform(-1, 1)
+        self.vy = -abs(speed) * rng.uniform(0.3, 1.0)
+        self.color = color
+        self.life = 0.6
+        self.max_life = 0.6
+
+    def update(self, dt):
+        self.vy += 900 * dt
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.life -= dt
+
+    def draw(self, surface):
+        if self.life <= 0:
+            return
+        r = max(2, int(6 * (self.life / self.max_life)))
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), r)
+
 
 class FruitNinjaScreen(BaseScreen):
     theme = FRUIT_NINJA_THEME
@@ -40,6 +69,8 @@ class FruitNinjaScreen(BaseScreen):
 
     def reset(self):
         self.fruits = []
+        self.splats = []
+        self.trail = []
         self.score = 0
         self.misses = 0
         self.spawn_timer = 0.0
@@ -63,14 +94,34 @@ class FruitNinjaScreen(BaseScreen):
             self.slice_at(event.pos)
 
     def slice_at(self, point):
-        """Slice any (unsliced) fruit under `point`. +1 score per fruit."""
+        """Slice any (unsliced) fruit under `point`. +1 score per fruit.
+
+        Also records the point for the blade trail and spawns juice.
+        """
+        self.trail.append(point)
+        if len(self.trail) > TRAIL_LENGTH:
+            self.trail.pop(0)
+
         for fruit in self.fruits:
             if not fruit.sliced and fruit.contains(point):
                 fruit.sliced = True
                 self.score += 1
+                self._spawn_splats(fruit)
+
+    def _spawn_splats(self, fruit):
+        for _ in range(10):
+            self.splats.append(Splat(fruit.x, fruit.y, fruit.highlight, self.rng))
 
     # -- update -------------------------------------------------------------
     def update(self, dt):
+        # Fade the blade trail even while idle so it doesn't linger.
+        if not pygame.mouse.get_pressed()[0] and self.trail:
+            self.trail.pop(0)
+
+        for splat in self.splats:
+            splat.update(dt)
+        self.splats = [s for s in self.splats if s.life > 0]
+
         if self.game_over:
             return
 
@@ -102,20 +153,35 @@ class FruitNinjaScreen(BaseScreen):
 
     # -- draw ---------------------------------------------------------------
     def draw(self, surface):
-        self._draw_sky(surface)
+        self._draw_background(surface)
         for fruit in self.fruits:
             fruit.draw(surface)
+        for splat in self.splats:
+            splat.draw(surface)
+        self._draw_trail(surface)
         self._draw_hud(surface)
         self._draw_back_button(surface)
         if self.game_over:
             self._draw_game_over(surface)
 
-    def _draw_sky(self, surface):
+    def _draw_background(self, surface):
         top, bottom = self.theme["sky_top"], self.theme["sky_bottom"]
         for y in range(SCREEN_HEIGHT):
             ratio = y / SCREEN_HEIGHT
             color = tuple(int(top[i] + (bottom[i] - top[i]) * ratio) for i in range(3))
             pygame.draw.line(surface, color, (0, y), (SCREEN_WIDTH, y))
+
+        ground_y = SCREEN_HEIGHT - 70
+        pygame.draw.rect(surface, self.theme["ground"], (0, ground_y, SCREEN_WIDTH, 70))
+        pygame.draw.line(surface, self.theme["accent"], (0, ground_y), (SCREEN_WIDTH, ground_y), 3)
+
+    def _draw_trail(self, surface):
+        if len(self.trail) < 2:
+            return
+        n = len(self.trail)
+        for i in range(1, n):
+            width = max(1, int(8 * i / n))
+            pygame.draw.line(surface, WHITE, self.trail[i - 1], self.trail[i], width)
 
     def _draw_hud(self, surface):
         title = self.title_font.render(self.theme["name"], True, WHITE)
@@ -127,6 +193,11 @@ class FruitNinjaScreen(BaseScreen):
         misses_left = MAX_MISSES - self.misses
         misses = self.hud_font.render(f"Lives: {misses_left}", True, self.theme["accent"])
         surface.blit(misses, (SCREEN_WIDTH - misses.get_width() - 24, 58))
+
+        hint = self.hint_font.render(
+            "Move with mouse held to slice   -   ESC for menu", True, (235, 235, 235)
+        )
+        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT - 32))
 
     def _draw_back_button(self, surface):
         pygame.draw.rect(surface, (0, 0, 0, 90), self.back_rect, border_radius=8)

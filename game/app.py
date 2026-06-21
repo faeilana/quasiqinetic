@@ -2,6 +2,8 @@
 
 import pygame
 
+from fruitninja import FruitNinjaScreen
+
 from .settings import FPS, GAME_TITLE, SCREEN_HEIGHT, SCREEN_WIDTH
 from .screens.landing import LandingScreen
 from .screens.menu import MenuScreen
@@ -36,6 +38,7 @@ class App:
             "train_station": TrainStationScreen(self),
             "woods": WoodsScreen(self),
             "mountain": MountainScreen(self),
+            "fruit_ninja": FruitNinjaScreen(self),
         }
 
         self.current_key = "landing"

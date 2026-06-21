@@ -19,26 +19,18 @@ fruitninja/
 ```
 
 `screen.py` builds on the same `BaseScreen` interface as the runner
-levels (`game/screens/base.py`), so wiring it into the existing app is
-the same flow as adding a 4th level (see the main `README.md`).
+levels (`game/screens/base.py`).
 
-## Wiring it into the app
+## Wiring (already done)
 
-1. Register the screen in `App.__init__` (`game/app.py`):
+The mode is registered and playable from the level-select menu:
 
-   ```python
-   from fruitninja import FruitNinjaScreen
-   ...
-   self.screens = {
-       ...
-       "fruit_ninja": FruitNinjaScreen(self),
-   }
-   ```
+- `App.__init__` (`game/app.py`) registers it under the `"fruit_ninja"`
+  key.
+- `MenuScreen._build_options` (`game/screens/menu.py`) adds a 4th card
+  pointing at that key.
 
-2. Add a `MenuOption` pointing at the `"fruit_ninja"` key in
-   `MenuScreen._build_options` (`game/screens/menu.py`).
-
-Until it's registered, you can smoke-test the screen on its own:
+You can also smoke-test the screen on its own:
 
 ```python
 import pygame
