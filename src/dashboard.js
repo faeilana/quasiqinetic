@@ -393,19 +393,11 @@ function renderNinjaPanel(sessions) {
 }
 
 // ── Game selector ────────────────────────────────────────────────────────────
-function initGameSelector(ninjaSessions) {
+function initGameSelector() {
   const btnRunner     = document.getElementById('btn-runner');
   const btnNinja      = document.getElementById('btn-ninja');
   const runnerContent = document.getElementById('runner-content');
   const ninjaContent  = document.getElementById('ninja-content');
-
-  // Remove "coming soon" styling if Fruit Ninja has sessions
-  if (ninjaSessions.length > 0) {
-    btnNinja.classList.remove('coming');
-    btnNinja.title = '';
-    const badge = btnNinja.querySelector('.badge');
-    if (badge) badge.remove();
-  }
 
   btnRunner.addEventListener('click', () => {
     btnRunner.classList.add('active');
@@ -432,7 +424,7 @@ async function init() {
   renderSummary(sessions);
   if (sessions.length > 0) renderRightPanel(sessions);
   renderNinjaPanel(ninjaSessions);
-  initGameSelector(ninjaSessions);
+  initGameSelector();
 
   // Joint dots — after image loads, lock container to exact image size so
   // %-positioned dots align precisely to the body image (not the flex parent).
