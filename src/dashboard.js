@@ -471,7 +471,8 @@ function renderNinjaPanel(sessions) {
   // Recent session list
   document.getElementById('ninja-history').innerHTML = sessions.slice(0, 8).map(s => {
     const dur  = s.startTime && s.endTime ? fmtMs2(s.endTime - s.startTime) : '—';
-    const when = s.startTime ? new Date(s.startTime).toLocaleDateString() : '—';
+    const d = s.startTime ? new Date(s.startTime) : null;
+    const when = d ? `${d.getMonth()+1}/${d.getDate()}` : '—';
     return `
       <div class="joint-row" style="grid-template-columns:60px 1fr 38px 36px">
         <span class="joint-row-label" style="font-size:10px;color:#392989;font-weight:700">${s.score ?? 0}</span>
