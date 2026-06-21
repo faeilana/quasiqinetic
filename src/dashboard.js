@@ -197,6 +197,92 @@ function drawDurationChart(canvas, byDate, days) {
   }
 }
 
+// ── Calories per session (bar chart, newest-first, last 10) ─────────────────
+function drawCaloriesChart(canvas, sessions) {
+  const dpr = window.devicePixelRatio || 1;
+  const CW  = canvas.clientWidth  || canvas.parentElement.clientWidth  || 280;
+  const CH  = canvas.clientHeight || canvas.parentElement.clientHeight || 230;
+  canvas.width  = CW * dpr;
+  canvas.height = CH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const W = CW, H = CH;
+  const PAD_L = 36, PAD_R = 8, PAD_T = 14, PAD_B = 28;
+  const CHART_W = W - PAD_L - PAD_R;
+  const CHART_H = H - PAD_T - PAD_B;
+
+  ctx.fillStyle = '#FAF8FE';
+  ctx.fillRect(0, 0, W, H);
+
+  const recent = sessions.slice(0, 10).reverse(); // oldest→newest left→right
+  if (recent.length === 0) {
+    ctx.fillStyle = 'rgba(95,39,139,0.3)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No sessions yet', W / 2, H / 2);
+    return;
+  }
+
+  const vals   = recent.map(s => s.calories ?? 0);
+  const maxVal = Math.max(...vals, 0.1);
+  const n      = recent.length;
+  const gap    = 5;
+  const barW   = Math.floor((CHART_W - gap * (n - 1)) / n);
+
+  ctx.lineWidth = 1;
+  for (let t = 0; t <= 4; t++) {
+    const gy = PAD_T + CHART_H * (1 - t / 4);
+    ctx.strokeStyle = 'rgba(95,39,139,0.12)';
+    ctx.beginPath(); ctx.moveTo(PAD_L, gy); ctx.lineTo(W - PAD_R, gy); ctx.stroke();
+    const label = (maxVal * t / 4).toFixed(1);
+    ctx.fillStyle = 'rgba(123,94,167,0.85)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t > 0 ? `${label}` : '0', PAD_L - 4, gy);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const v    = vals[i];
+    const barH = v > 0 ? Math.max(4, (v / maxVal) * CHART_H) : 0;
+    const bx   = PAD_L + i * (barW + gap);
+    const by   = PAD_T + CHART_H - barH;
+
+    if (barH > 0) {
+      const grad = ctx.createLinearGradient(bx, by + barH, bx, by);
+      grad.addColorStop(0,   '#D431A1');
+      grad.addColorStop(0.4, '#5F278B');
+      grad.addColorStop(1,   '#E9F95B');
+      ctx.fillStyle = grad;
+      ctx.fillRect(bx, by, barW, barH);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      for (let sy = by + 1; sy < by + barH; sy += 3) ctx.fillRect(bx, sy, barW, 1);
+
+      ctx.fillStyle = 'rgba(233,249,91,0.8)';
+      ctx.fillRect(bx, by, barW, 2);
+
+      if (barH > 22) {
+        ctx.fillStyle = 'rgba(26,10,53,0.9)';
+        ctx.font = 'bold 9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`${v.toFixed(1)}`, bx + barW / 2, by + 4);
+      }
+    }
+
+    // Session label: date
+    const when = recent[i].startTime ? new Date(recent[i].startTime).toLocaleDateString('en-CA').slice(5).replace('-', '/') : '';
+    ctx.fillStyle = v > 0 ? 'rgba(57,41,137,0.85)' : 'rgba(95,39,139,0.3)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(when, bx + barW / 2, PAD_T + CHART_H + 6);
+  }
+}
+
 // ── Render joint dots on body image ──────────────────────────────────────────
 function renderJointDots(container, img, heatMap, sessions) {
   container.querySelectorAll('.joint-dot').forEach(el => el.remove());
@@ -469,10 +555,38 @@ async function init() {
     container.style.height = `${img.clientHeight}px`;
   });
 
-  // Chart — rAF lets CSS settle so clientWidth is accurate
-  const chartCanvas = document.getElementById('duration-chart');
-  requestAnimationFrame(() => drawDurationChart(chartCanvas, byDate, days));
-  window.addEventListener('resize', () => drawDurationChart(chartCanvas, byDate, days));
+  // Chart tabs
+  const chartCanvas  = document.getElementById('duration-chart');
+  const tabDuration  = document.getElementById('tab-duration');
+  const tabCalories  = document.getElementById('tab-calories');
+  const chartTitle   = document.getElementById('chart-title');
+  let activeTab      = 'duration';
+
+  function renderChart() {
+    if (activeTab === 'duration') {
+      drawDurationChart(chartCanvas, byDate, days);
+    } else {
+      drawCaloriesChart(chartCanvas, sessions);
+    }
+  }
+
+  tabDuration.addEventListener('click', () => {
+    activeTab = 'duration';
+    tabDuration.classList.add('active');
+    tabCalories.classList.remove('active');
+    chartTitle.textContent = 'Gameplay Duration';
+    renderChart();
+  });
+  tabCalories.addEventListener('click', () => {
+    activeTab = 'calories';
+    tabCalories.classList.add('active');
+    tabDuration.classList.remove('active');
+    chartTitle.textContent = 'Calories per Session';
+    renderChart();
+  });
+
+  requestAnimationFrame(renderChart);
+  window.addEventListener('resize', renderChart);
 }
 
 init();

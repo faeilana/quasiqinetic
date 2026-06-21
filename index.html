@@ -177,6 +177,16 @@
     .chart-title-row .subtitle {
       font-size: 0.6rem; color: var(--original); font-weight: 500;
     }
+    .chart-tabs { display: flex; gap: 4px; padding: 6px 12px 0; }
+    .chart-tab {
+      font-family: var(--font); font-size: 0.6rem; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 100px; border: 1.5px solid var(--border);
+      background: transparent; color: var(--text-3); cursor: pointer; transition: all 0.15s;
+    }
+    .chart-tab.active {
+      background: var(--egyptian); color: white; border-color: var(--egyptian);
+    }
     .chart-wrap { flex: 1; padding: 12px 10px 8px; min-height: 0; }
     #duration-chart { display: block; width: 100%; height: 100%; }
 
@@ -419,7 +429,7 @@
     </button>
   </div>
 
-  <a href="/" class="play-btn" id="play-btn">▶ PLAY</a>
+  <a href="/runner.html" class="play-btn" id="play-btn">▶ PLAY</a>
 </header>
 
 <!-- ── Main grid ───────────────────────────────────────────────────── -->
@@ -445,8 +455,12 @@
 
     <div class="panel chart-panel">
       <div class="chart-title-row">
-        <span class="title">Gameplay Duration</span>
+        <span class="title" id="chart-title">Gameplay Duration</span>
         <span class="subtitle">last 7 days</span>
+      </div>
+      <div class="chart-tabs">
+        <button class="chart-tab active" id="tab-duration">Duration</button>
+        <button class="chart-tab" id="tab-calories">Calories</button>
       </div>
       <div class="chart-wrap">
         <canvas id="duration-chart"></canvas>
