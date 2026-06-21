@@ -17,8 +17,6 @@ A browser-based gamified wellness app powered by real-time pose detection. No we
 | AI | Claude (Anthropic) | Architecture, game logic, dashboard, debugging |
 | AI | Devin (Cognition) | Feature implementation, game mechanics |
 
-Yes, really. The contributors list on this repo says it all.
-
 ---
 
 ## What it does
