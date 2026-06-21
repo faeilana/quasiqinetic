@@ -1,16 +1,20 @@
 // Web port of Devin's Python Fruit Ninja (fruitninja/screen.py + fruit.py)
-// Physics, spawn intervals, fruit colors, splat particles, trail — all match the Python original.
+// Camera integration: MediaPipe wrist landmarks drive slicing (left=cyan trail, right=orange trail).
+// Mouse/touch slicing remains active as fallback or secondary input.
+
+import { createPoseTracker, startWebcam, LM } from '../poseTracker.js';
 
 const SCREEN_W        = 1000;
 const SCREEN_H        = 650;
-const GRAVITY         = 900;       // px/s² — matches Python
-const SPAWN_INTERVAL  = 0.9;       // seconds
-const MIN_LAUNCH      = 700;       // px/s upward
+const GRAVITY         = 900;
+const SPAWN_INTERVAL  = 0.9;
+const MIN_LAUNCH      = 700;
 const MAX_LAUNCH      = 950;
 const FRUIT_RADIUS    = 34;
 const MAX_MISSES      = 3;
-const TRAIL_LENGTH    = 12;
+const TRAIL_LENGTH    = 14;
 const STORAGE_KEY     = 'fruitninja-sessions';
+const WRIST_MIN_MOVE  = 12; // min px movement in game coords to register a wrist slice
 
 const THEME = {
   skyTop:    [28,  16,  40],
@@ -29,25 +33,33 @@ const FRUITS = [
 ];
 
 // ── Canvas ───────────────────────────────────────────────────────────────────
-const canvas = document.getElementById('game-canvas');
-const ctx    = canvas.getContext('2d');
-canvas.width  = SCREEN_W;
-canvas.height = SCREEN_H;
+const canvas   = document.getElementById('game-canvas');
+const ctx      = canvas.getContext('2d');
+const videoEl  = document.getElementById('webcam');
+const overlayEl= document.getElementById('overlay');
+const statusEl = document.getElementById('status');
+canvas.width   = SCREEN_W;
+canvas.height  = SCREEN_H;
 
 function fitCanvas() {
   const ratio = SCREEN_W / SCREEN_H;
-  let w = window.innerWidth, h = window.innerWidth / ratio;
-  if (h > window.innerHeight) { h = window.innerHeight; w = h * ratio; }
+  let w = window.innerWidth, h = w / ratio;
+  if (h > window.innerHeight * 0.9) { h = window.innerHeight * 0.9; w = h * ratio; }
   canvas.style.width  = `${w}px`;
   canvas.style.height = `${h}px`;
 }
 fitCanvas();
 window.addEventListener('resize', fitCanvas);
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function setStatus(msg, cls = '') {
+  statusEl.textContent = msg;
+  statusEl.className = cls;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const rgb  = (a) => `rgb(${a[0]},${a[1]},${a[2]})`;
 const rnd  = (lo, hi) => Math.random() * (hi - lo) + lo;
-const pick = (arr)    => arr[Math.floor(Math.random() * arr.length)];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function toCanvas(e) {
   const r  = canvas.getBoundingClientRect();
@@ -66,7 +78,13 @@ function roundRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-// ── Fruit class ───────────────────────────────────────────────────────────────
+// Map normalized wrist landmark (0–1) → game canvas coords.
+// Flip x because the camera video is displayed mirrored (transform: scaleX(-1)).
+function wristToGame(lm) {
+  return [(1 - lm.x) * SCREEN_W, lm.y * SCREEN_H];
+}
+
+// ── Fruit ─────────────────────────────────────────────────────────────────────
 class Fruit {
   constructor() {
     const f    = pick(FRUITS);
@@ -97,13 +115,11 @@ class Fruit {
   }
 
   draw() {
-    // Body
     ctx.beginPath();
     ctx.arc(this.x, this.y, FRUIT_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = rgb(this.color);
     ctx.fill();
 
-    // Highlight spot (offset + rotating for roundness effect)
     const off = FRUIT_RADIUS * 0.35;
     const hx  = this.x - off * Math.cos(this.angle);
     const hy  = this.y - off * Math.sin(this.angle);
@@ -112,7 +128,6 @@ class Fruit {
     ctx.fillStyle = rgb(this.hl);
     ctx.fill();
 
-    // Slice line
     if (this.sliced) {
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 3;
@@ -124,18 +139,18 @@ class Fruit {
   }
 }
 
-// ── Splat particle ───────────────────────────────────────────────────────────
+// ── Splat ─────────────────────────────────────────────────────────────────────
 class Splat {
   constructor(x, y, color) {
     const speed = rnd(120, 320);
     const ang   = rnd(0, Math.PI * 2);
-    this.x      = x;
-    this.y      = y;
-    this.vx     = speed * Math.cos(ang);
-    this.vy     = -Math.abs(speed) * rnd(0.3, 1.0);
-    this.color  = color;
-    this.life   = 0.6;
-    this.maxLife= 0.6;
+    this.x     = x;
+    this.y     = y;
+    this.vx    = speed * Math.cos(ang);
+    this.vy    = -Math.abs(speed) * rnd(0.3, 1.0);
+    this.color = color;
+    this.life  = 0.6;
+    this.maxLife = 0.6;
   }
 
   update(dt) {
@@ -155,19 +170,28 @@ class Splat {
   }
 }
 
-// ── Game state ───────────────────────────────────────────────────────────────
-let fruits = [], splats = [], trail = [];
-let score, misses, spawnTimer, gameOver, startTime, slicing;
+// ── Game state ────────────────────────────────────────────────────────────────
+let fruits = [], splats = [];
+let mouseTrail = [];             // white trail for mouse
+let leftTrail  = [], rightTrail = []; // cyan/orange trails for wrists
+let score, misses, spawnTimer, gameOver, startTime, mouseSlicing;
+
+// Camera state
+let leftPrev  = null; // previous [x,y] of left wrist in game coords
+let rightPrev = null;
+let cameraActive = false;
 
 function reset() {
-  fruits = []; splats = []; trail = [];
+  fruits = []; splats = [];
+  mouseTrail = []; leftTrail = []; rightTrail = [];
+  leftPrev = null; rightPrev = null;
   score = 0; misses = 0; spawnTimer = 0;
-  gameOver = false; slicing = false;
+  gameOver = false; mouseSlicing = false;
   startTime = Date.now();
 }
 reset();
 
-// ── Session save (localStorage, same format as Python JSON) ──────────────────
+// ── Session save ──────────────────────────────────────────────────────────────
 function saveSession() {
   const endTime   = Date.now();
   const durationS = (endTime - startTime) / 1000;
@@ -180,10 +204,9 @@ function saveSession() {
   } catch {}
 }
 
-// ── Slice logic ───────────────────────────────────────────────────────────────
-function sliceAt(px, py) {
-  trail.push([px, py]);
-  if (trail.length > TRAIL_LENGTH) trail.shift();
+// ── Slice helpers ─────────────────────────────────────────────────────────────
+function checkFruitsAt(px, py) {
+  if (gameOver) return;
   for (const f of fruits) {
     if (!f.sliced && f.contains(px, py)) {
       f.sliced = true;
@@ -193,7 +216,63 @@ function sliceAt(px, py) {
   }
 }
 
-// ── Input ─────────────────────────────────────────────────────────────────────
+// Mouse/touch: add to white trail + check fruits
+function mouseSliceAt(px, py) {
+  mouseTrail.push([px, py]);
+  if (mouseTrail.length > TRAIL_LENGTH) mouseTrail.shift();
+  checkFruitsAt(px, py);
+}
+
+// Wrist: interpolate 5 points along segment for reliable hit detection
+function wristSliceSegment(x0, y0, x1, y1, trailArr) {
+  const steps = 5;
+  for (let i = 0; i <= steps; i++) {
+    const t  = i / steps;
+    const px = x0 + (x1 - x0) * t;
+    const py = y0 + (y1 - y0) * t;
+    trailArr.push([px, py]);
+    if (trailArr.length > TRAIL_LENGTH) trailArr.shift();
+    checkFruitsAt(px, py);
+  }
+}
+
+// ── Pose callback (called by MediaPipe at ~30 fps) ────────────────────────────
+function onPoseResult(landmarks) {
+  const lw = landmarks[LM.LEFT_WRIST];
+  const rw = landmarks[LM.RIGHT_WRIST];
+
+  // Left wrist (cyan trail)
+  if (lw && (lw.visibility ?? 0) > 0.4) {
+    const [nx, ny] = wristToGame(lw);
+    if (leftPrev) {
+      const d = Math.hypot(nx - leftPrev[0], ny - leftPrev[1]);
+      if (d > WRIST_MIN_MOVE && !gameOver) {
+        wristSliceSegment(leftPrev[0], leftPrev[1], nx, ny, leftTrail);
+      }
+    }
+    leftPrev = [nx, ny];
+  } else {
+    leftPrev = null;
+    if (leftTrail.length) leftTrail.shift(); // fade when wrist lost
+  }
+
+  // Right wrist (orange trail)
+  if (rw && (rw.visibility ?? 0) > 0.4) {
+    const [nx, ny] = wristToGame(rw);
+    if (rightPrev) {
+      const d = Math.hypot(nx - rightPrev[0], ny - rightPrev[1]);
+      if (d > WRIST_MIN_MOVE && !gameOver) {
+        wristSliceSegment(rightPrev[0], rightPrev[1], nx, ny, rightTrail);
+      }
+    }
+    rightPrev = [nx, ny];
+  } else {
+    rightPrev = null;
+    if (rightTrail.length) rightTrail.shift();
+  }
+}
+
+// ── Input: mouse / touch ──────────────────────────────────────────────────────
 const BACK_BTN = { x: 24, y: 24, w: 130, h: 40 };
 function inBackBtn(px, py) {
   return px >= BACK_BTN.x && px <= BACK_BTN.x + BACK_BTN.w &&
@@ -204,30 +283,30 @@ canvas.addEventListener('mousedown', (e) => {
   const [px, py] = toCanvas(e);
   if (inBackBtn(px, py)) { window.location.href = '/dashboard.html'; return; }
   if (gameOver) { reset(); return; }
-  slicing = true;
-  sliceAt(px, py);
+  mouseSlicing = true;
+  mouseSliceAt(px, py);
 });
 canvas.addEventListener('mousemove', (e) => {
-  if (!slicing || gameOver) return;
-  sliceAt(...toCanvas(e));
+  if (!mouseSlicing || gameOver) return;
+  mouseSliceAt(...toCanvas(e));
 });
-canvas.addEventListener('mouseup',    () => { slicing = false; });
-canvas.addEventListener('mouseleave', () => { slicing = false; });
+canvas.addEventListener('mouseup',    () => { mouseSlicing = false; });
+canvas.addEventListener('mouseleave', () => { mouseSlicing = false; });
 
 canvas.addEventListener('touchstart', (e) => {
   e.preventDefault();
   const [px, py] = toCanvas(e);
   if (inBackBtn(px, py)) { window.location.href = '/dashboard.html'; return; }
   if (gameOver) { reset(); return; }
-  slicing = true;
-  sliceAt(px, py);
+  mouseSlicing = true;
+  mouseSliceAt(px, py);
 }, { passive: false });
 canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
-  if (!slicing || gameOver) return;
-  sliceAt(...toCanvas(e));
+  if (!mouseSlicing || gameOver) return;
+  mouseSliceAt(...toCanvas(e));
 }, { passive: false });
-canvas.addEventListener('touchend', () => { slicing = false; });
+canvas.addEventListener('touchend', () => { mouseSlicing = false; });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') window.location.href = '/dashboard.html';
@@ -236,7 +315,13 @@ document.addEventListener('keydown', (e) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
-  if (!slicing && trail.length) trail.shift();
+  // Fade mouse trail when not held
+  if (!mouseSlicing && mouseTrail.length) mouseTrail.shift();
+  // Fade wrist trails when wrists are still (faded per pose callback above, but
+  // also tick here once per game frame so they vanish smoothly at 60 fps)
+  if (leftTrail.length  > 0) leftTrail.shift();
+  if (rightTrail.length > 0) rightTrail.shift();
+
   splats.forEach(s => s.update(dt));
   splats = splats.filter(s => s.life > 0);
   if (gameOver) return;
@@ -262,7 +347,7 @@ function update(dt) {
   }
 }
 
-// ── Draw ─────────────────────────────────────────────────────────────────────
+// ── Draw ──────────────────────────────────────────────────────────────────────
 function drawBg() {
   const g = ctx.createLinearGradient(0, 0, 0, SCREEN_H);
   g.addColorStop(0, rgb(THEME.skyTop));
@@ -281,16 +366,17 @@ function drawBg() {
   ctx.stroke();
 }
 
-function drawTrail() {
-  if (trail.length < 2) return;
-  const n = trail.length;
+function drawTrailArr(trailArr, colorFn) {
+  if (trailArr.length < 2) return;
+  const n = trailArr.length;
   ctx.lineCap = 'round';
   for (let i = 1; i < n; i++) {
-    ctx.strokeStyle = `rgba(255,255,255,${i / n})`;
+    const alpha = i / n;
+    ctx.strokeStyle = colorFn(alpha);
     ctx.lineWidth   = Math.max(1, Math.floor(8 * i / n));
     ctx.beginPath();
-    ctx.moveTo(trail[i-1][0], trail[i-1][1]);
-    ctx.lineTo(trail[i][0],   trail[i][1]);
+    ctx.moveTo(trailArr[i-1][0], trailArr[i-1][1]);
+    ctx.lineTo(trailArr[i][0],   trailArr[i][1]);
     ctx.stroke();
   }
 }
@@ -308,21 +394,27 @@ function drawHUD() {
   ctx.fillStyle = rgb(THEME.accent);
   ctx.fillText(`Lives: ${MAX_MISSES - misses}`, SCREEN_W - 24, 64);
 
+  // Camera mode indicator
+  if (cameraActive) {
+    ctx.textAlign = 'left';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(109,255,179,0.9)';
+    ctx.fillText('● CAMERA ON — slice with your hands', 200, 18);
+  }
+
   ctx.textAlign = 'center';
   ctx.font = '13px Inter, sans-serif';
-  ctx.fillStyle = 'rgba(235,235,235,0.75)';
-  ctx.fillText('Drag mouse to slice   ·   ESC for dashboard', SCREEN_W / 2, SCREEN_H - 14);
+  ctx.fillStyle = 'rgba(235,235,235,0.6)';
+  ctx.fillText('Drag mouse · or wave hands to slice   ·   ESC = dashboard', SCREEN_W / 2, SCREEN_H - 14);
 }
 
 function drawBackBtn() {
   const { x, y, w, h } = BACK_BTN;
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  roundRect(x, y, w, h, 8);
-  ctx.fill();
+  roundRect(x, y, w, h, 8); ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.6)';
   ctx.lineWidth = 2;
-  roundRect(x, y, w, h, 8);
-  ctx.stroke();
+  roundRect(x, y, w, h, 8); ctx.stroke();
   ctx.fillStyle = 'white';
   ctx.font = '14px Inter, sans-serif';
   ctx.textAlign = 'center';
@@ -344,20 +436,27 @@ function drawGameOver() {
 
   ctx.fillStyle = 'white';
   ctx.font = '16px Inter, sans-serif';
-  ctx.fillText('Click or press Space to play again   ·   ESC for dashboard', SCREEN_W / 2, SCREEN_H / 2 + 50);
+  ctx.fillText('Click / wave hand / Space to play again   ·   ESC = dashboard', SCREEN_W / 2, SCREEN_H / 2 + 50);
 }
 
 function draw() {
   drawBg();
   fruits.forEach(f => f.draw());
   splats.forEach(s => s.draw());
-  drawTrail();
+
+  // Mouse trail — white
+  drawTrailArr(mouseTrail, (a) => `rgba(255,255,255,${a})`);
+  // Left wrist trail — cyan
+  drawTrailArr(leftTrail,  (a) => `rgba(80,210,255,${a})`);
+  // Right wrist trail — orange
+  drawTrailArr(rightTrail, (a) => `rgba(255,160,50,${a})`);
+
   drawHUD();
   drawBackBtn();
   if (gameOver) drawGameOver();
 }
 
-// ── Loop ─────────────────────────────────────────────────────────────────────
+// ── Loop ──────────────────────────────────────────────────────────────────────
 let last = null;
 function loop(ts) {
   if (last === null) last = ts;
@@ -368,3 +467,21 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// ── Camera boot (async — game already running with mouse while this loads) ────
+async function initCamera() {
+  try {
+    setStatus('Requesting camera…');
+    await startWebcam(videoEl);
+    setStatus('Loading MediaPipe… (first load ~20 s)');
+    await createPoseTracker(videoEl, overlayEl, (landmarks) => {
+      cameraActive = true;
+      onPoseResult(landmarks);
+    }, (msg) => setStatus(msg));
+    setStatus('Camera ready — wave your hands to slice!', 'ready');
+  } catch (err) {
+    setStatus(`Camera unavailable: ${err.message} — use mouse to play`, 'error');
+    console.warn('[fruitninja] camera init failed:', err);
+  }
+}
+initCamera();
