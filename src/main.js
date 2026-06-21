@@ -49,8 +49,10 @@ let prevRunnerPhase = "idle";
 const HAND_RAISE_HOLD = 25;
 let handRaiseCount    = 0;
 
-const COUNTDOWN_MS = 3000;
-let countdownStart = null;
+const COUNTDOWN_MS  = 3000;
+const RESTART_MS    = 2500;  // auto-restart delay after game over
+let countdownStart  = null;
+let restartStart    = null;
 
 // Initial render — shows the 3D scene with idle overlay
 runner.render();
@@ -158,6 +160,24 @@ function gameLoop() {
     return;
   }
 
+  // ── restarting (auto-countdown after game over, no hand raise needed) ────────
+  if (appPhase === "restarting") {
+    const elapsed = performance.now() - restartStart;
+    const pct     = Math.min(1, elapsed / RESTART_MS);
+    renderWithOverlay(() => {
+      drawWaitingOverlay(hudCtx, pct, CANVAS_W, CANVAS_H, {
+        title:    "Get ready…",
+        subtitle: "starting again automatically",
+        color:    "#f43f5e",
+      });
+    });
+    setStatus("Get ready…");
+    if (elapsed >= RESTART_MS) {
+      appPhase = "countdown"; countdownStart = performance.now();
+    }
+    return;
+  }
+
   // ── countdown ──────────────────────────────────────────────────────────────
   if (appPhase === "countdown") {
     const elapsed     = performance.now() - countdownStart;
@@ -204,9 +224,9 @@ function gameLoop() {
     setStatus("Go!", "ready");
   }
 
-  // Return to waiting state after game ends
+  // After game ends, auto-restart instead of requiring another hand raise
   if (phaseAfter === "dead" || phaseAfter === "won") {
-    appPhase = "waiting"; handRaiseCount = 0;
+    appPhase = "restarting"; restartStart = performance.now();
   }
   prevRunnerPhase = phaseAfter;
 
