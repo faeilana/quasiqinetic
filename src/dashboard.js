@@ -7,20 +7,20 @@ const STORAGE_KEY = 'movement-runner-sessions';
 // Positions are [left%, top%] relative to the body image's rendered bounds.
 // Tuned for src/img/human_body.png — arms-at-sides front-facing figure.
 const JOINT_META = {
-  leftShoulder:  { pos: [33, 21], label: 'Left Shoulder',  actions: ['lean_left'] },
-  rightShoulder: { pos: [67, 21], label: 'Right Shoulder', actions: ['lean_right'] },
-  leftElbow:     { pos: [27, 34], label: 'Left Elbow',     actions: [] },
-  rightElbow:    { pos: [73, 34], label: 'Right Elbow',    actions: [] },
-  leftWrist:     { pos: [24, 47], label: 'Left Wrist',     actions: [] },
-  rightWrist:    { pos: [76, 47], label: 'Right Wrist',    actions: [] },
+  leftShoulder:  { pos: [39, 21], label: 'Left Shoulder',  actions: ['lean_left'] },
+  rightShoulder: { pos: [61, 21], label: 'Right Shoulder', actions: ['lean_right'] },
+  leftElbow:     { pos: [36, 34], label: 'Left Elbow',     actions: [] },
+  rightElbow:    { pos: [64, 34], label: 'Right Elbow',    actions: [] },
+  leftWrist:     { pos: [35, 47], label: 'Left Wrist',     actions: [] },
+  rightWrist:    { pos: [65, 47], label: 'Right Wrist',    actions: [] },
   spine:         { pos: [50, 27], label: 'Spine (Upper)',   actions: ['jump', 'lean_left', 'lean_right'] },
   lowerBack:     { pos: [50, 44], label: 'Lower Back',     actions: ['duck'] },
-  leftHip:       { pos: [40, 54], label: 'Left Hip',       actions: ['jump', 'duck', 'lean_left', 'lean_right'] },
-  rightHip:      { pos: [60, 54], label: 'Right Hip',      actions: ['jump', 'duck', 'lean_left', 'lean_right'] },
-  leftKnee:      { pos: [39, 68], label: 'Left Knee',      actions: ['jump', 'duck'] },
-  rightKnee:     { pos: [61, 68], label: 'Right Knee',     actions: ['jump', 'duck'] },
-  leftAnkle:     { pos: [38, 83], label: 'Left Ankle',     actions: ['jump'] },
-  rightAnkle:    { pos: [62, 83], label: 'Right Ankle',    actions: ['jump'] },
+  leftHip:       { pos: [44, 53], label: 'Left Hip',       actions: ['jump', 'duck', 'lean_left', 'lean_right'] },
+  rightHip:      { pos: [56, 53], label: 'Right Hip',      actions: ['jump', 'duck', 'lean_left', 'lean_right'] },
+  leftKnee:      { pos: [45, 68], label: 'Left Knee',      actions: ['jump', 'duck'] },
+  rightKnee:     { pos: [55, 68], label: 'Right Knee',     actions: ['jump', 'duck'] },
+  leftAnkle:     { pos: [45, 83], label: 'Left Ankle',     actions: ['jump'] },
+  rightAnkle:    { pos: [55, 83], label: 'Right Ankle',    actions: ['jump'] },
 };
 
 const ACTION_COLOR = {
