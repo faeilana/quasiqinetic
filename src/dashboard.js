@@ -648,6 +648,37 @@ function initUsername() {
   refresh();
 }
 
+function backfillLeaderboard() {
+  try {
+    const board = JSON.parse(localStorage.getItem(LB_KEY) ?? '[]');
+    const existing = new Set(board.map(e => e.timestamp));
+    const username = getUsername();
+    let changed = false;
+
+    const runnerSessions = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    for (const s of runnerSessions) {
+      const ts = s.endTime ?? s.startTime;
+      if (ts && !existing.has(ts)) {
+        board.push({ username, game_id: 'runner', score: s.score ?? 0, calories: s.calories ?? 0, timestamp: ts });
+        existing.add(ts);
+        changed = true;
+      }
+    }
+
+    const ninjaSessions = JSON.parse(localStorage.getItem('fruitninja-sessions') ?? '[]');
+    for (const s of ninjaSessions) {
+      const ts = s.endTime ?? s.startTime;
+      if (ts && !existing.has(ts)) {
+        board.push({ username, game_id: 'fruitninja', score: s.score ?? 0, calories: s.calories ?? 0, timestamp: ts });
+        existing.add(ts);
+        changed = true;
+      }
+    }
+
+    if (changed) _origSetItem(LB_KEY, JSON.stringify(board));
+  } catch {}
+}
+
 function initLeaderboard() {
   const btn     = document.getElementById('lb-btn');
   const modal   = document.getElementById('lb-modal');
@@ -724,5 +755,6 @@ localStorage.setItem = function(key, value) {
 };
 
 initUsername();
+backfillLeaderboard();
 initLeaderboard();
 init();
