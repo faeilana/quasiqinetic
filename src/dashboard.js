@@ -398,18 +398,31 @@ function initGameSelector() {
   const btnNinja      = document.getElementById('btn-ninja');
   const runnerContent = document.getElementById('runner-content');
   const ninjaContent  = document.getElementById('ninja-content');
+  const playBtn       = document.getElementById('play-btn');
 
   btnRunner.addEventListener('click', () => {
     btnRunner.classList.add('active');
     btnNinja.classList.remove('active');
     runnerContent.style.display = '';
     ninjaContent.style.display  = 'none';
+    playBtn.href        = '/';
+    playBtn.textContent = '▶ PLAY';
+    playBtn.title       = '';
+    playBtn.style.opacity      = '';
+    playBtn.style.cursor       = '';
+    playBtn.onclick            = null;
   });
   btnNinja.addEventListener('click', () => {
     btnNinja.classList.add('active');
     btnRunner.classList.remove('active');
     runnerContent.style.display = 'none';
     ninjaContent.style.display  = 'flex';
+    playBtn.removeAttribute('href');
+    playBtn.textContent = '▶ python main.py';
+    playBtn.title       = 'Fruit Ninja runs as a desktop app — launch it from your terminal';
+    playBtn.style.opacity      = '0.65';
+    playBtn.style.cursor       = 'default';
+    playBtn.onclick            = (e) => e.preventDefault();
   });
 }
 
