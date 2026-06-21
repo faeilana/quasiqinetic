@@ -425,7 +425,7 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.font = '13px Inter, sans-serif';
   ctx.fillStyle = 'rgba(235,235,235,0.6)';
-  ctx.fillText('Drag mouse · or wave hands to slice   ·   ESC = dashboard', SCREEN_W / 2, SCREEN_H - 14);
+  ctx.fillText('Drag mouse · or wave hands to slice', SCREEN_W / 2, SCREEN_H - 14);
 }
 
 function drawBackBtn() {
@@ -456,7 +456,7 @@ function drawGameOver() {
 
   ctx.fillStyle = 'white';
   ctx.font = '16px Inter, sans-serif';
-  ctx.fillText('Click / wave hand / Space to play again   ·   ESC = dashboard', SCREEN_W / 2, SCREEN_H / 2 + 50);
+  ctx.fillText('Click / wave hand / Space to play again', SCREEN_W / 2, SCREEN_H / 2 + 50);
 }
 
 function draw() {
