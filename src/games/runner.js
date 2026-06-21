@@ -189,8 +189,8 @@ export function createRunner(canvas) {
     // Jump physics
     if (s.jumping) {
       s.jumpY += s.jumpV;
-      s.jumpV -= 0.009;
-      if (s.jumpY <= 0) { s.jumpY = 0; s.jumpV = 0; s.jumping = false; s.jumpLandCD = 40; }
+      s.jumpV -= 0.014;
+      if (s.jumpY <= 0) { s.jumpY = 0; s.jumpV = 0; s.jumping = false; s.jumpLandCD = 20; }
     }
     if (s.jumpLandCD > 0) s.jumpLandCD--;
     if (s.invincF   > 0) s.invincF--;
@@ -296,7 +296,7 @@ export function createRunner(canvas) {
   function applyAction(action) {
     // Jump
     if (action === 'jump' && !s.jumping && s.jumpLandCD === 0 && s.laneT >= 1) {
-      s.jumping = true; s.jumpY = 0; s.jumpV = 0.22;
+      s.jumping = true; s.jumpY = 0; s.jumpV = 0.15;
     }
     // Duck
     s.ducking = action === 'duck';
