@@ -1,0 +1,6 @@
+pygame>=2.5.0
+
+# Uncomment these once you wire up real computer-vision tracking
+# (jump / lean detection) into tracking/pose_tracker.py:
+# opencv-python>=4.9.0
+# mediapipe>=0.10.9
