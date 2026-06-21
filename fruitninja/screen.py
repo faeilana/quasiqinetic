@@ -7,11 +7,23 @@ Input today is the mouse pointer as a stand-in for a slicing motion - move
 with the button held (or click) to slice. Once `tracking/pose_tracker.py`
 emits a hand position, feed that point into `slice_at()` instead of the
 mouse and the rest works unchanged.
+
+Sessions are saved to public/fruitninja-sessions.json so the web dashboard
+can display them alongside Movement Runner stats.
 """
 
+import json
+import os
 import random
+import time
 
 import pygame
+
+# Path to the shared sessions file (public/ is served statically by Vite).
+_SESSIONS_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "public", "fruitninja-sessions.json",
+)
 
 from game.fonts import baloo2, luckiest_guy
 from game.screens.base import BaseScreen
@@ -75,6 +87,7 @@ class FruitNinjaScreen(BaseScreen):
         self.misses = 0
         self.spawn_timer = 0.0
         self.game_over = False
+        self._start_time = int(time.time() * 1000)
 
     def on_enter(self):
         self.reset()
@@ -142,14 +155,44 @@ class FruitNinjaScreen(BaseScreen):
                 remaining.append(fruit)
         self.fruits = remaining
 
-        if self.misses >= MAX_MISSES:
+        if self.misses >= MAX_MISSES and not self.game_over:
             self.game_over = True
+            self._save_session()
 
     def _spawn_fruit(self):
         x = self.rng.randint(120, SCREEN_WIDTH - 120)
         vx = self.rng.uniform(-120, 120)
         vy = -self.rng.uniform(MIN_LAUNCH_SPEED, MAX_LAUNCH_SPEED)
         self.fruits.append(Fruit(x, vx, vy, SCREEN_HEIGHT, rng=self.rng))
+
+    # -- persistence --------------------------------------------------------
+    def _save_session(self):
+        """Append this session to public/fruitninja-sessions.json."""
+        end_time = int(time.time() * 1000)
+        duration_s = (end_time - self._start_time) / 1000
+        # MET ~4 for light arm activity (slicing); 65 kg assumed
+        calories = 4 * 65 / 3600 * duration_s
+        session = {
+            "game_id":   "fruitninja",
+            "startTime": self._start_time,
+            "endTime":   end_time,
+            "score":     self.score,
+            "misses":    self.misses,
+            "calories":  round(calories, 2),
+        }
+        try:
+            os.makedirs(os.path.dirname(_SESSIONS_FILE), exist_ok=True)
+            if os.path.exists(_SESSIONS_FILE):
+                with open(_SESSIONS_FILE) as f:
+                    sessions = json.load(f)
+            else:
+                sessions = []
+            sessions.insert(0, session)
+            sessions = sessions[:20]  # keep last 20
+            with open(_SESSIONS_FILE, "w") as f:
+                json.dump(sessions, f)
+        except Exception as exc:
+            print(f"[fruitninja] could not save session: {exc}")
 
     # -- draw ---------------------------------------------------------------
     def draw(self, surface):

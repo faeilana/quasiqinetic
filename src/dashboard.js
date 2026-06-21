@@ -327,12 +327,85 @@ function renderSummary(sessions) {
   document.getElementById('stat-duration').textContent = totalMs > 0 ? fmtMs(totalMs) : '—';
 }
 
+// ── Load Fruit Ninja sessions from public/fruitninja-sessions.json ───────────
+async function loadNinjaSessions() {
+  try {
+    const res = await fetch('/fruitninja-sessions.json');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+function fmtMs2(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function renderNinjaPanel(sessions) {
+  if (sessions.length === 0) {
+    document.getElementById('ninja-no-sessions').style.display = '';
+    document.getElementById('ninja-stats').closest('.panel').style.display = 'none';
+    document.getElementById('ninja-history').closest('.panel').style.display = 'none';
+    document.getElementById('ninja-cal-latest').textContent = '—';
+    document.getElementById('ninja-cal-total').textContent  = '—';
+    return;
+  }
+
+  const latest   = sessions[0];
+  const totalCal = sessions.reduce((s, x) => s + (x.calories ?? 0), 0);
+  document.getElementById('ninja-cal-latest').textContent = Math.round(latest.calories ?? 0);
+  document.getElementById('ninja-cal-total').textContent  = Math.round(totalCal);
+
+  // Summary stats
+  const bestScore = Math.max(...sessions.map(s => s.score ?? 0));
+  const avgScore  = Math.round(sessions.reduce((s, x) => s + (x.score ?? 0), 0) / sessions.length);
+  const totalSessions = sessions.length;
+  document.getElementById('ninja-stats').innerHTML = [
+    { label: 'Sessions played', val: totalSessions, color: '#392989' },
+    { label: 'Best score',      val: bestScore,     color: '#D431A1' },
+    { label: 'Average score',   val: avgScore,      color: '#985DC7' },
+  ].map(({ label, val, color }) => `
+    <div class="move-row">
+      <span class="move-label">${label}</span>
+      <div class="move-track">
+        <div class="move-fill" style="width:${Math.min(100, Math.round(val / Math.max(bestScore, 1) * 100))}%;background:${color}"></div>
+      </div>
+      <span class="move-count">${val}</span>
+    </div>`).join('');
+
+  // Recent session list
+  document.getElementById('ninja-history').innerHTML = sessions.slice(0, 8).map(s => {
+    const dur  = s.startTime && s.endTime ? fmtMs2(s.endTime - s.startTime) : '—';
+    const when = s.startTime ? new Date(s.startTime).toLocaleDateString() : '—';
+    return `
+      <div class="joint-row" style="grid-template-columns:60px 1fr 38px 36px">
+        <span class="joint-row-label" style="font-size:10px;color:#392989;font-weight:700">${s.score ?? 0}</span>
+        <div class="joint-track">
+          <div class="joint-fill" style="width:${Math.min(100, Math.round((s.score ?? 0) / Math.max(bestScore, 1) * 100))}%;background:#D431A1"></div>
+        </div>
+        <span class="joint-score" style="color:#985DC7">${dur}</span>
+        <span class="joint-score">${when}</span>
+      </div>`;
+  }).join('');
+}
+
 // ── Game selector ────────────────────────────────────────────────────────────
-function initGameSelector() {
+function initGameSelector(ninjaSessions) {
   const btnRunner     = document.getElementById('btn-runner');
   const btnNinja      = document.getElementById('btn-ninja');
   const runnerContent = document.getElementById('runner-content');
   const ninjaContent  = document.getElementById('ninja-content');
+
+  // Remove "coming soon" styling if Fruit Ninja has sessions
+  if (ninjaSessions.length > 0) {
+    btnNinja.classList.remove('coming');
+    btnNinja.title = '';
+    const badge = btnNinja.querySelector('.badge');
+    if (badge) badge.remove();
+  }
 
   btnRunner.addEventListener('click', () => {
     btnRunner.classList.add('active');
@@ -344,20 +417,22 @@ function initGameSelector() {
     btnNinja.classList.add('active');
     btnRunner.classList.remove('active');
     runnerContent.style.display = 'none';
-    ninjaContent.style.display  = 'block';
+    ninjaContent.style.display  = 'flex';
   });
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-function init() {
-  const sessions = loadSessions();
+async function init() {
+  const sessions      = loadSessions();
+  const ninjaSessions = await loadNinjaSessions();
   const heatMap  = aggregateJointHeat(sessions);
   const byDate   = durationByDate(sessions);
   const days     = getLast7Days();
 
   renderSummary(sessions);
   if (sessions.length > 0) renderRightPanel(sessions);
-  initGameSelector();
+  renderNinjaPanel(ninjaSessions);
+  initGameSelector(ninjaSessions);
 
   // Joint dots — after image loads, lock container to exact image size so
   // %-positioned dots align precisely to the body image (not the flex parent).

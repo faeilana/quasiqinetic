@@ -510,17 +510,34 @@
 
     </div>
 
-    <!-- Ninja coming soon -->
-    <div class="ninja-content panel" id="ninja-content" style="flex:1">
-      <div class="coming-soon-panel">
-        <div class="cs-icon">🍉</div>
-        <div class="cs-title">Fruit Ninja</div>
-        <div class="cs-sub">
-          This game mode is being developed by Devin AI.<br>
-          Track your slices, combos &amp; reaction time.
+    <!-- Ninja stats (mirrors runner-content structure) -->
+    <div class="ninja-content" id="ninja-content" style="display:none;flex-direction:column;gap:12px;flex:1">
+
+      <div class="panel cal-card">
+        <div class="panel-title">Calories Burned</div>
+        <div style="padding:14px 0 10px">
+          <div class="cal-big" id="ninja-cal-latest">—</div>
+          <div class="cal-big-label">latest session · kcal</div>
+          <div class="cal-sub">All-time total: <span id="ninja-cal-total">—</span> kcal</div>
         </div>
-        <div class="cs-badge">⚡ Coming Soon</div>
       </div>
+
+      <div class="panel" style="flex:1">
+        <div class="panel-title">Session Stats</div>
+        <div class="move-list" id="ninja-stats"></div>
+      </div>
+
+      <div class="panel" style="flex:1">
+        <div class="panel-title">Recent Sessions</div>
+        <div class="joint-list" id="ninja-history"></div>
+      </div>
+
+      <div class="panel" id="ninja-no-sessions" style="display:none">
+        <div class="session-card">
+          <div class="empty-state">No sessions yet.<br>Run the Fruit Ninja Python app to record stats.</div>
+        </div>
+      </div>
+
     </div>
 
   </div>
