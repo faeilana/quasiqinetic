@@ -118,6 +118,10 @@ export async function createPoseTracker(videoEl, canvasEl, onPoseResult, onStatu
   let frameCount    = 0;
   let detectedCount = 0;
 
+  // Smoothed landmark positions for stable dot rendering
+  let smoothedLandmarks = null;
+  const LERP_FACTOR = 0.6; // Higher = more responsive, lower = smoother
+
   function syncCanvasSize() {
     const w = videoEl.videoWidth  || 640;
     const h = videoEl.videoHeight || 480;
@@ -131,13 +135,30 @@ export async function createPoseTracker(videoEl, canvasEl, onPoseResult, onStatu
     }
   }
 
-  function drawSkeleton(landmarks) {
+  function lerpLandmarks(raw) {
+    if (!smoothedLandmarks) {
+      smoothedLandmarks = raw.map(lm => ({ ...lm }));
+      return smoothedLandmarks;
+    }
+    for (let i = 0; i < raw.length; i++) {
+      if (!raw[i] || (raw[i].visibility ?? 0) < 0.3) continue;
+      if (!smoothedLandmarks[i]) { smoothedLandmarks[i] = { ...raw[i] }; continue; }
+      smoothedLandmarks[i].x += (raw[i].x - smoothedLandmarks[i].x) * LERP_FACTOR;
+      smoothedLandmarks[i].y += (raw[i].y - smoothedLandmarks[i].y) * LERP_FACTOR;
+      smoothedLandmarks[i].visibility = raw[i].visibility;
+    }
+    return smoothedLandmarks;
+  }
+
+  function drawSkeleton(rawLandmarks) {
+    const landmarks = lerpLandmarks(rawLandmarks);
     const w = canvasEl.width;
     const h = canvasEl.height;
     const vis = (i) => (landmarks[i]?.visibility ?? 0) >= 0.4;
 
     // Coloured connection segments
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     for (const seg of SEGMENTS) {
       ctx.strokeStyle = seg.color;
       for (const [a, b] of seg.pairs) {
@@ -154,12 +175,13 @@ export async function createPoseTracker(videoEl, canvasEl, onPoseResult, onStatu
     for (let i = 0; i < landmarks.length; i++) {
       const lm = landmarks[i];
       if (!lm || (lm.visibility ?? 0) < 0.4) continue;
+      const radius = BIG.has(i) ? 6 : 4;
       ctx.beginPath();
-      ctx.arc(lm.x * w, lm.y * h, BIG.has(i) ? 6 : 4, 0, Math.PI * 2);
+      ctx.arc(lm.x * w, lm.y * h, radius, 0, Math.PI * 2);
       ctx.fillStyle = dotColor(i);
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
     }
   }

@@ -281,7 +281,7 @@ function inBackBtn(px, py) {
 
 canvas.addEventListener('mousedown', (e) => {
   const [px, py] = toCanvas(e);
-  if (inBackBtn(px, py)) { window.location.href = '/dashboard.html'; return; }
+  if (inBackBtn(px, py)) { window.location.href = '/'; return; }
   if (gameOver) { reset(); return; }
   mouseSlicing = true;
   mouseSliceAt(px, py);
@@ -296,7 +296,7 @@ canvas.addEventListener('mouseleave', () => { mouseSlicing = false; });
 canvas.addEventListener('touchstart', (e) => {
   e.preventDefault();
   const [px, py] = toCanvas(e);
-  if (inBackBtn(px, py)) { window.location.href = '/dashboard.html'; return; }
+  if (inBackBtn(px, py)) { window.location.href = '/'; return; }
   if (gameOver) { reset(); return; }
   mouseSlicing = true;
   mouseSliceAt(px, py);
@@ -309,7 +309,7 @@ canvas.addEventListener('touchmove', (e) => {
 canvas.addEventListener('touchend', () => { mouseSlicing = false; });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') window.location.href = '/dashboard.html';
+  if (e.key === 'Escape') window.location.href = '/';
   if (gameOver && (e.key === ' ' || e.key === 'Enter')) reset();
 });
 

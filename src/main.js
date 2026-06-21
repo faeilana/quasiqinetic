@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/browser";
 import { createPoseTracker, startWebcam } from "./poseTracker.js";
 import { createClassifier } from "./classifyPose.js";
+import { PoseHistory } from "./poseHistory.js";
 import { createRunner, CANVAS_W, CANVAS_H } from "./games/runner.js";
 import { drawActionHUD, drawCalibrationOverlay, drawWaitingOverlay, drawCountdownOverlay } from "./hud.js";
 import { startSession, endSession, logPrediction } from "./arizeClient.js";
@@ -30,9 +31,15 @@ function setStatus(msg, cls = "") {
   statusEl.className = cls;
 }
 
-const classifier = createClassifier();
-const runner     = createRunner(gameCanvas);   // Three.js takes the canvas
-const stats      = createStats();
+const classifier  = createClassifier();
+const poseHistory = new PoseHistory();
+const runner      = createRunner(gameCanvas);   // Three.js takes the canvas
+const stats       = createStats();
+
+// ── Shared pose state (written by pose callback, read by game loop) ──────────
+let latestLandmarks      = null;
+let latestWorldLandmarks = null;
+let poseReady            = false;
 
 // ── App state machine ─────────────────────────────────────────────────────────
 // pre-calibrate → calibrating → waiting → countdown → playing
@@ -59,15 +66,13 @@ function isHandRaised(lm) {
 }
 
 // Returns true if the player's hips are roughly centered in the camera frame.
-// hipX in MediaPipe is 0=left edge, 1=right edge of the unmirrored frame.
 function isPersonCentered(lm) {
   const l = lm[23], r = lm[24];
-  if (!l || !r || (l.visibility ?? 0) < 0.5 || (r.visibility ?? 0) < 0.5) return true; // unknown — don't warn
+  if (!l || !r || (l.visibility ?? 0) < 0.5 || (r.visibility ?? 0) < 0.5) return true;
   const hipX = (l.x + r.x) / 2;
-  return Math.abs(hipX - 0.5) < 0.18;   // within ±18% of frame center
+  return Math.abs(hipX - 0.5) < 0.18;
 }
 
-// Draws a centering nudge on the hudCtx if person is off-center.
 function maybDrawCenterWarning(lm) {
   if (isPersonCentered(lm)) return;
   hudCtx.save();
@@ -87,15 +92,29 @@ function tickHandRaise(lm) {
   return handRaiseCount;
 }
 
-// Render the 3D scene then draw a 2D overlay on the hud canvas
 function renderWithOverlay(drawFn) {
   runner.render();
   hudCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawFn();
 }
 
-// ── Main pose callback ────────────────────────────────────────────────────────
+// ── Pose callback (only stores data, no rendering) ────────────────────────────
 function onPoseResult(landmarks, worldLandmarks) {
+  latestLandmarks = landmarks;
+  latestWorldLandmarks = worldLandmarks;
+  poseHistory.push(landmarks);
+  poseReady = true;
+}
+
+// ── Game loop (runs at display refresh rate, decoupled from pose detection) ───
+function gameLoop() {
+  requestAnimationFrame(gameLoop);
+
+  if (!poseReady || !latestLandmarks) return;
+
+  // Use smoothed landmarks for display/classification
+  const landmarks = poseHistory.getSmoothed() || latestLandmarks;
+  const worldLandmarks = latestWorldLandmarks;
 
   // ── pre-calibrate ──────────────────────────────────────────────────────────
   if (appPhase === "pre-calibrate") {
@@ -146,6 +165,7 @@ function onPoseResult(landmarks, worldLandmarks) {
     renderWithOverlay(() => drawCountdownOverlay(hudCtx, secondsLeft, CANVAS_W, CANVAS_H));
     if (elapsed >= COUNTDOWN_MS) {
       classifier.clearJumpState();
+      poseHistory.clear();
       stats.begin();
       runner.start();
       startSession("runner");
@@ -203,6 +223,9 @@ async function main() {
     setStatus("Loading MediaPipe… (first load ~20s)");
     await createPoseTracker(videoEl, overlayEl, onPoseResult, (msg) => setStatus(msg));
     setStatus("Step back so your full body is visible — raise hand to start");
+
+    // Start decoupled game loop
+    requestAnimationFrame(gameLoop);
   } catch (err) {
     Sentry.captureException(err);
     setStatus(`Error: ${err.message}`, "error");

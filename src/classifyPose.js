@@ -6,11 +6,13 @@ import { LM } from "./poseTracker.js";
 
 const CALIBRATION_FRAMES = 60; // ~2 s at 30 fps
 
-const JUMP_HIP_DROP    = 0.16; // hips must rise this much above smoothed baseline (y decreases = up)
+const JUMP_HIP_DROP    = 0.10; // hips must rise this much above smoothed baseline (y decreases = up)
 const JUMP_CONF_RANGE  = 0.08;
-const JUMP_CONSEC_REQ  = 5;    // consecutive frames of elevation needed — filters out sway/noise
-const JUMP_COOLDOWN_F  = 30;   // frames before jump can re-trigger after firing
-const HIP_SMOOTH_N     = 5;    // rolling-average window to smooth noisy hip readings
+const JUMP_CONSEC_REQ  = 3;    // consecutive frames of elevation needed — filters out sway/noise
+const JUMP_COOLDOWN_F  = 20;   // frames before jump can re-trigger after firing
+const HIP_SMOOTH_N     = 4;    // rolling-average window to smooth noisy hip readings
+const JUMP_VELOCITY_THRESHOLD = -0.8; // normalized units/sec; negative = moving up
+const SHOULDER_WEIGHT  = 0.3;  // how much shoulder rise contributes to jump detection
 
 const DUCK_SHOULDER_FALL  = 0.09; // shoulders must drop this much below baseline (y increases = down)
 const DUCK_CONF_RANGE     = 0.10;
@@ -64,6 +66,9 @@ export function createClassifier() {
   let jumpConsec   = 0;   // consecutive frames hip is above threshold
   let jumpCooldown = 0;   // frames remaining before jump can fire again
   let hipYHistory  = [];  // rolling buffer for hip-Y smoothing
+  let shoulderYHistory = []; // rolling buffer for shoulder-Y smoothing
+  let prevHipY     = null; // for velocity computation
+  let prevTimestamp = null;
   // Schmitt-trigger zone: -1=left, 0=center, 1=right.
   // Enters a zone when delta crosses LEAN_THRESHOLD; exits when delta returns
   // within 40% of threshold, preventing jitter near the boundary.
@@ -86,6 +91,9 @@ export function createClassifier() {
     jumpConsec   = 0;
     jumpCooldown = 0;
     hipYHistory  = [];
+    shoulderYHistory = [];
+    prevHipY     = null;
+    prevTimestamp = null;
     leanZone     = 0;
   }
 
@@ -130,20 +138,44 @@ export function createClassifier() {
     if (hipYHistory.length > HIP_SMOOTH_N) hipYHistory.shift();
     const smoothHipY = avg(hipYHistory);
 
-    // 1. Jump — smoothed hips rise clearly above baseline for several consecutive frames.
-    //    Requires JUMP_CONSEC_REQ sustained frames to filter sway/bounce noise.
-    //    A cooldown after firing prevents rapid re-jumps on landing.
+    // Smooth shoulder-Y for combined jump detection
+    shoulderYHistory.push(shoulderY);
+    if (shoulderYHistory.length > HIP_SMOOTH_N) shoulderYHistory.shift();
+    const smoothShoulderY = avg(shoulderYHistory);
+
+    // Compute hip velocity (negative = moving up)
+    const now = performance.now();
+    let hipVelocity = 0;
+    if (prevHipY !== null && prevTimestamp !== null) {
+      const dt = (now - prevTimestamp) / 1000;
+      if (dt > 0) hipVelocity = (hipY - prevHipY) / dt;
+    }
+    prevHipY = hipY;
+    prevTimestamp = now;
+
+    // 1. Jump — uses combined position delta AND velocity for early detection.
+    //    Position: smoothed hips (+ shoulder contribution) above baseline.
+    //    Velocity: rapid upward movement triggers immediately.
     if (jumpCooldown > 0) {
       jumpCooldown--;
       jumpConsec = 0;
     } else if (allVisible(landmarks, LM.LEFT_HIP, LM.RIGHT_HIP)) {
-      const delta = baseline.hipY - smoothHipY;  // positive = hips moved up
-      if (delta > JUMP_HIP_DROP) {
+      const hipDelta = baseline.hipY - smoothHipY;  // positive = hips moved up
+      const shoulderDelta = baseline.shoulderY - smoothShoulderY; // positive = shoulders up
+      const combinedDelta = hipDelta + SHOULDER_WEIGHT * shoulderDelta;
+
+      // Velocity-based early trigger: fast upward movement fires jump immediately
+      const velocityTriggered = hipVelocity < JUMP_VELOCITY_THRESHOLD && hipDelta > JUMP_HIP_DROP * 0.5;
+
+      if (combinedDelta > JUMP_HIP_DROP || velocityTriggered) {
         jumpConsec++;
-        if (jumpConsec >= JUMP_CONSEC_REQ) {
+        if (jumpConsec >= JUMP_CONSEC_REQ || velocityTriggered) {
           jumpCooldown = JUMP_COOLDOWN_F;
           jumpConsec   = 0;
-          return { action: "jump", confidence: clamp01(delta / (JUMP_HIP_DROP + JUMP_CONF_RANGE)), calibrating: false };
+          const conf = velocityTriggered
+            ? clamp01(Math.abs(hipVelocity) / (Math.abs(JUMP_VELOCITY_THRESHOLD) * 2))
+            : clamp01(combinedDelta / (JUMP_HIP_DROP + JUMP_CONF_RANGE));
+          return { action: "jump", confidence: conf, calibrating: false };
         }
       } else {
         jumpConsec = 0;  // reset streak if elevation drops below threshold

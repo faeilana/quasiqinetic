@@ -411,7 +411,7 @@ function initGameSelector() {
     btnNinja.classList.remove('active');
     runnerContent.style.display = '';
     ninjaContent.style.display  = 'none';
-    playBtn.href        = '/';
+    playBtn.href        = '/runner.html';
     playBtn.textContent = '▶ PLAY';
     playBtn.title       = '';
     playBtn.style.opacity      = '';
